@@ -55,6 +55,12 @@ export interface Team {
     guestSettings?: TeamGuestSettings;
 }
 
+export interface Channel {
+    id?: string;
+    displayName?: string;
+    description?: string;
+}
+
 export interface TeamMemberSettings {
     allowCreateUpdateChannels?: boolean;
     allowDeleteChannels?: boolean;
@@ -137,6 +143,7 @@ export class TeamsApi {
         let requestBody = {
             "@odata.id": `https://graph.microsoft.com/beta/directoryObjects/${userObjectId}`,
         };
+
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/members/$ref`,
             body: requestBody,
@@ -186,18 +193,39 @@ export class TeamsApi {
         await request.patch(options);
     }
 
+    // Create a new channel
+    public async createChannelAsync(groupId: string, displayName: string, description?: string): Promise<Channel> {
+        let requestBody: Channel = {
+            displayName: displayName,
+        };
+        if (description) {
+            requestBody.description = description;
+        }
+
+        let options = {
+            url: `${graphBaseUrl}/groups/${groupId}/channels`,
+            body: requestBody,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        return await request.post(options);
+    }
+
     // Create a new group
     private async createGroupAsync(displayName: string, description: string): Promise<Group>
     {
-        let requestBody = {
+        let requestBody: Group = {
             displayName: displayName,
             description: description,
             mailEnabled: true,
             mailNickname: "teamAlias100",
             securityEnabled: false,
-            visibility: "Private",
-            groupTypes: [ "Unified" ],
+            visibility: "private",
+            groupTypes: [ "unified" ],
         };
+
         let options = {
             url: `${graphBaseUrl}/groups`,
             body: requestBody,
@@ -206,8 +234,7 @@ export class TeamsApi {
                 "Authorization": `Bearer ${this.accessToken}`,
             },
         };
-        let responseBody = await request.post(options);
-        return responseBody as Group;
+        return await request.post(options);
     }
 
     // Create a team given an existing group
@@ -221,7 +248,6 @@ export class TeamsApi {
                 "Authorization": `Bearer ${this.accessToken}`,
             },
         };
-        let responseBody = await request.put(options);
-        return responseBody as Team;
+        return await request.put(options);
     }
 }

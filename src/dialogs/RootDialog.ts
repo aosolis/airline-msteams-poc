@@ -81,9 +81,28 @@ export class RootDialog extends builder.IntentDialog
             return;
         }
 
+        // Set up channels
+        let channelsToAdd: teams.Channel[] = [
+            {
+                displayName: "Flight",
+                description: "Aircraft and flight path",
+            },
+            {
+                displayName: "Crew",
+            },
+        ];
+        let channelsAddPromises = channelsToAdd.map(async channel => {
+            try {
+                await teamsApi.createChannelAsync(team.id, channel.displayName, channel.description);
+            } catch (e) {
+                session.send(`Error creating channel ${channel.displayName}: ${e.message}`);
+            }
+        });
+        await Promise.all(channelsAddPromises);
+
         // Add team members
-        let teamMembers = [ "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3", "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c", "f431b248-8e59-4afa-a307-054a1f220f24" ];
-        let memberAddPromises = teamMembers.map(async memberId => {
+        let membersToAdd = [ "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3", "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c", "f431b248-8e59-4afa-a307-054a1f220f24" ];
+        let memberAddPromises = membersToAdd.map(async memberId => {
             try {
                 await teamsApi.addMemberToTeamAsync(team.id, memberId);
             } catch (e) {
@@ -91,7 +110,8 @@ export class RootDialog extends builder.IntentDialog
             }
         });
         await Promise.all(memberAddPromises);
-        session.send("Done setting up team!");
+
+        session.send(`Done setting up team, group id is ${team.id}`);
     }
 
     private async handleArchiveTeam(session: builder.Session): Promise<void> {
@@ -117,6 +137,8 @@ export class RootDialog extends builder.IntentDialog
             await teamsApi.updateGroupAsync(teamId, {
                 displayName: "[ARCHIVED] Test team",
             });
+
+            session.send(`Archived the team with group id ${teamId}`);
         } catch (e) {
             session.send(`Error archiving team: ${e.message}`);
         }
