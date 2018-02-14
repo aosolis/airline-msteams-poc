@@ -99,9 +99,9 @@ export class TeamsApi {
     }
 
     // Create a new team
-    public async createTeamAsync(displayName: string, description: string, teamSettings: Team): Promise<Team>
+    public async createTeamAsync(displayName: string, description: string, mailNickname: string, teamSettings: Team): Promise<Team>
     {
-        let newGroup = await this.createGroupAsync(displayName, description);
+        let newGroup = await this.createGroupAsync(displayName, description, mailNickname);
         let newTeam: Team;
 
         // The group may not be created yet, so retry up to 3 times, waiting 10 seconds between retries
@@ -126,8 +126,8 @@ export class TeamsApi {
         return newTeam;
     }
 
-    // Delete a team
-    public async deleteTeamAsync(groupId: string): Promise<void> {
+    // Delete a team (group)
+    public async deleteGroupAsync(groupId: string): Promise<void> {
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}`,
             json: true,
@@ -138,8 +138,8 @@ export class TeamsApi {
         await request.delete(options);
     }
 
-    // Add a member to a team
-    public async addMemberToTeamAsync(groupId: string, userObjectId: string): Promise<void> {
+    // Add a member to a team (group)
+    public async addMemberToGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         let requestBody = {
             "@odata.id": `https://graph.microsoft.com/beta/directoryObjects/${userObjectId}`,
         };
@@ -155,8 +155,8 @@ export class TeamsApi {
         await request.post(options);
     }
 
-    // Remove a member from a team
-    public async removeMemberFromTeamAsync(groupId: string, userObjectId: string): Promise<void> {
+    // Remove a member from a team (group)
+    public async removeMemberFromGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/members/${userObjectId}/$ref`,
             json: true,
@@ -167,8 +167,8 @@ export class TeamsApi {
         await request.delete(options);
     }
 
-    // Get the members of a team
-    public async getMembersAsync(groupId: string): Promise<DirectoryObject[]> {
+    // Get the members of a team (group)
+    public async getMembersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/members`,
             json: true,
@@ -178,6 +178,18 @@ export class TeamsApi {
         };
         let responseBody = await request.get(options);
         return responseBody.value || [];
+    }
+
+    // Get group information
+    public async getGroupAsync(groupId: string): Promise<Group> {
+        let options = {
+            url: `${graphBaseUrl}/groups/${groupId}`,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        return await request.get(options);
     }
 
     // Update group information
@@ -214,13 +226,13 @@ export class TeamsApi {
     }
 
     // Create a new group
-    private async createGroupAsync(displayName: string, description: string): Promise<Group>
+    private async createGroupAsync(displayName: string, description: string, mailNickname: string): Promise<Group>
     {
         let requestBody: Group = {
             displayName: displayName,
             description: description,
             mailEnabled: true,
-            mailNickname: "teamAlias100",
+            mailNickname: mailNickname,
             securityEnabled: false,
             visibility: "private",
             groupTypes: [ "unified" ],

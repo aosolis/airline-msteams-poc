@@ -24,12 +24,15 @@
 import * as builder from "botbuilder";
 import * as constants from "../constants";
 import { AzureADv1Dialog } from "./AzureADv1Dialog";
+import * as airline from "../AirlineApi";
 import * as teams from "../TeamsApi";
 import * as utils from "../utils";
 
 // Root dialog provides choices in identity providers
 export class RootDialog extends builder.IntentDialog
 {
+    private airlineApi: airline.AirlineApi = new airline.AirlineApi();
+
     constructor() {
         super();
     }
@@ -43,6 +46,7 @@ export class RootDialog extends builder.IntentDialog
 
         new AzureADv1Dialog().register(bot, this);
         this.matches(/azureADv1/i, constants.DialogId.AzureADv1);
+        this.matches(/triggerSetup/i, (session) => { this.handleTriggerSetup(session); });
         this.matches(/createTeam/i, (session) => { this.handleCreateTeam(session); });
         this.matches(/archiveTeam/i, (session) => { this.handleArchiveTeam(session); });
         this.matches(/deleteTeam/i, (session) => { this.handleDeleteTeam(session); });
@@ -51,6 +55,11 @@ export class RootDialog extends builder.IntentDialog
     // Handle resumption of dialog
     public dialogResumed<T>(session: builder.Session, result: builder.IDialogResult<T>): void {
         session.send("Ok, tell me what to do");
+    }
+
+    private async handleTriggerSetup(session: builder.Session): Promise<void> {
+        let flight = await this.airlineApi.getFlightInfoAsync(null);
+        await this.createTeamForFlight(session, flight);
     }
 
     private async handleCreateTeam(session: builder.Session): Promise<void> {
@@ -73,7 +82,7 @@ export class RootDialog extends builder.IntentDialog
                     allowDeleteChannels: false,
                 },
             };
-            team = await teamsApi.createTeamAsync("Test Team", "Test Team Description", teamSettings);
+            team = await teamsApi.createTeamAsync("Test Team", "Test Team Description", "test100", teamSettings);
             session.userData.teamId = team.id;
             session.send(`Created a new team, group id is ${team.id}`);
         } catch (e) {
@@ -104,9 +113,71 @@ export class RootDialog extends builder.IntentDialog
         let membersToAdd = [ "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3", "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c", "f431b248-8e59-4afa-a307-054a1f220f24" ];
         let memberAddPromises = membersToAdd.map(async memberId => {
             try {
-                await teamsApi.addMemberToTeamAsync(team.id, memberId);
+                await teamsApi.addMemberToGroupAsync(team.id, memberId);
             } catch (e) {
                 session.send(`Error adding member ${memberId}: ${e.message}`);
+            }
+        });
+        await Promise.all(memberAddPromises);
+
+        session.send(`Done setting up team, group id is ${team.id}`);
+    }
+
+    private async createTeamForFlight(session: builder.Session, flight: airline.Flight): Promise<void> {
+        let userInfo = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
+        let teamsApi = new teams.TeamsApi(userInfo.accessToken);
+
+        // Create the team
+        let team: teams.Team;
+        try {
+            let departureUTC = new Date(flight.scheduledDeparture.utcTime);
+            let displayName = `${flight.flightNumber} (${flight.origin.code}-${flight.destination.code}) ${departureUTC.getFullYear()}-${departureUTC.getMonth() + 1}-${departureUTC.getDate()}`;
+            let teamSettings: teams.Team = {
+                memberSettings: {
+                    allowAddRemoveApps: false,
+                    allowCreateUpdateChannels: false,
+                    allowCreateUpdateRemoveConnectors: false,
+                    allowCreateUpdateRemoveTabs: false,
+                    allowDeleteChannels: false,
+                },
+                guestSettings: {
+                    allowCreateUpdateChannels: false,
+                    allowDeleteChannels: false,
+                },
+            };
+            team = await teamsApi.createTeamAsync(displayName, null, flight.id, teamSettings);
+            session.userData.teamId = team.id;
+            session.send(`Created a new team, group id is ${team.id}`);
+        } catch (e) {
+            session.send(`Error creating team: ${e.message}`);
+            return;
+        }
+
+        // Set up channels
+        let channelsToAdd: teams.Channel[] = [
+            {
+                displayName: "Flight",
+                description: "Aircraft and flight path",
+            },
+            {
+                displayName: "Crew",
+            },
+        ];
+        let channelsAddPromises = channelsToAdd.map(async channel => {
+            try {
+                await teamsApi.createChannelAsync(team.id, channel.displayName, channel.description);
+            } catch (e) {
+                session.send(`Error creating channel ${channel.displayName}: ${e.message}`);
+            }
+        });
+        await Promise.all(channelsAddPromises);
+
+        // Add team members
+        let memberAddPromises = flight.crew.map(async crewMember => {
+            try {
+                await teamsApi.addMemberToGroupAsync(team.id, crewMember.objectId);
+            } catch (e) {
+                session.send(`Error adding ${crewMember.name} (${crewMember.objectId}): ${e.message}`);
             }
         });
         await Promise.all(memberAddPromises);
@@ -119,14 +190,15 @@ export class RootDialog extends builder.IntentDialog
         let teamsApi = new teams.TeamsApi(userInfo.accessToken);
 
         try {
-            // Remove all team members
             let teamId = session.userData.teamId;
-            let teamMembers = await teamsApi.getMembersAsync(teamId);
+
+            // Remove all team members
+            let teamMembers = await teamsApi.getMembersOfGroupAsync(teamId);
             console.log(`Found ${teamMembers.length} members in the team`);
 
             let memberRemovePromises = teamMembers.map(async member => {
                 try {
-                    await teamsApi.removeMemberFromTeamAsync(teamId, member.id);
+                    await teamsApi.removeMemberFromGroupAsync(teamId, member.id);
                 } catch (e) {
                     session.send(`Error removing member ${member.id}: ${e.message}`);
                 }
@@ -134,9 +206,12 @@ export class RootDialog extends builder.IntentDialog
             await Promise.all(memberRemovePromises);
 
             // Rename group
-            await teamsApi.updateGroupAsync(teamId, {
-                displayName: "[ARCHIVED] Test team",
-            });
+            let group = await teamsApi.getGroupAsync(teamId);
+            if (!group.displayName.startsWith("[ARCHIVED]")) {
+                await teamsApi.updateGroupAsync(teamId, {
+                    displayName: "[ARCHIVED] " + group.displayName,
+                });
+            }
 
             session.send(`Archived the team with group id ${teamId}`);
         } catch (e) {
@@ -150,7 +225,7 @@ export class RootDialog extends builder.IntentDialog
 
         try {
             let teamId = session.userData.teamId;
-            await teamsApi.deleteTeamAsync(teamId);
+            await teamsApi.deleteGroupAsync(teamId);
             delete session.userData.teamId;
             session.send(`Deleted the team with group id ${teamId}`);
         } catch (e) {
