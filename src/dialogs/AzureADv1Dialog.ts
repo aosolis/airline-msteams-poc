@@ -22,33 +22,149 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import * as builder from "botbuilder";
+import * as config from "config";
 import * as constants from "../constants";
-import { AzureADv1Provider } from "../providers";
-import { BaseIdentityDialog } from "./BaseIdentityDialog";
+import * as utils from "../utils";
+import { IOAuth2Provider } from "../providers";
+let uuidv4 = require("uuid/v4");
 
-// Dialog that handles dialogs for AzureADv1 provider
-export class AzureADv1Dialog extends BaseIdentityDialog
+// Base identity dialog
+export class AzureADv1Dialog extends builder.IntentDialog
 {
+    private authProvider: IOAuth2Provider;
+    private providerDisplayName: string;
+    private providerName: string;
+
     constructor() {
-        super(constants.IdentityProviders.azureADv1, constants.DialogId.AzureADv1);
+        super();
+        this.providerName = constants.IdentityProviders.azureADv1;
     }
 
-    // Show user profile
-    protected async showUserProfile(session: builder.Session): Promise<void> {
-        let azureADApi = this.authProvider as AzureADv1Provider;
-        let userToken = this.getUserToken(session);
+    // Register the dialog with the bot
+    public register(bot: builder.UniversalBot, rootDialog: builder.IntentDialog): void {
+        bot.dialog(constants.DialogId.AzureADv1, this);
 
-        if (userToken) {
-            let profile = await azureADApi.getProfileAsync(userToken.accessToken);
-            let profileCard = new builder.ThumbnailCard()
-                .title(profile.displayName)
-                .subtitle(profile.mail)
-                .text(`${profile.jobTitle}<br/> ${profile.officeLocation}`);
-            session.send(new builder.Message().addAttachment(profileCard));
+        this.authProvider = bot.get(this.providerName) as IOAuth2Provider;
+        this.providerDisplayName = this.authProvider.displayName;
+
+        this.onBegin((session, args, next) => { this.onDialogBegin(session, args, next); });
+        this.onDefault((session) => { this.onMessageReceived(session); });
+    }
+
+    // Handle start of dialog
+    private async onDialogBegin(session: builder.Session, args: any, next: () => void): Promise<void> {
+        switch (args.matched.input) {
+            case "login":
+                this.handleLogin(session);
+                break;
+
+            case "logout":
+                this.handleLogout(session);
+                break;
+        }
+        next();
+    }
+
+    // Handle message
+    private async onMessageReceived(session: builder.Session): Promise<void> {
+        let messageAsAny = session.message as any;
+        if (messageAsAny.originalInvoke) {
+            // This was originally an invoke message
+            let event = messageAsAny.originalInvoke;
+            if (event.name === "signin/verifyState") {
+                await this.handleLoginCallback(session);
+            } else {
+                // Unrecognized invoke, exit the dialog
+                session.endDialog();
+            }
         } else {
-            session.send("Please sign in to AzureAD so I can access your profile.");
+            // See if we are waiting for a verification code and got one
+            if (utils.isUserTokenPendingVerification(session, this.providerName)) {
+                let verificationCode = utils.findVerificationCode(session.message.text);
+                utils.validateVerificationCode(session, this.providerName, verificationCode);
+
+                if (utils.getUserToken(session, this.providerName)) {
+                    session.send(`Thank you for signing in.`);
+                } else {
+                    session.send(`Sorry, there was an error signing in to ${this.providerDisplayName}. Please try again.`);
+                }
+            } else {
+                // Unrecognized input
+                session.send("Sorry, I didn't understand.");
+            }
         }
 
-        await this.promptForAction(session);
+        session.endDialog();
+    }
+
+    // Handle user login callback
+    private async handleLoginCallback(session: builder.Session): Promise<void> {
+        let messageAsAny = session.message as any;
+        let verificationCode = messageAsAny.originalInvoke.value.state;
+
+        utils.validateVerificationCode(session, this.providerName, verificationCode);
+
+        // End of auth flow: if the token is marked as validated, then the user is logged in
+
+        if (utils.getUserToken(session, this.providerName)) {
+            session.send(`Thank you for signing in.`);
+        } else {
+            session.send(`Sorry, there was an error signing in to ${this.providerDisplayName}. Please try again.`);
+        }
+        session.endDialog();
+    }
+
+    // Handle user login request
+    private async handleLogin(session: builder.Session): Promise<void> {
+        if (utils.getUserToken(session, this.providerName)) {
+            // User is already logged in
+            session.send(`You're already signed in.`);
+            session.endDialog();
+        } else {
+            // Create the OAuth state, including a random anti-forgery state token
+            let state = JSON.stringify({
+                securityToken: uuidv4(),
+                address: session.message.address,
+            });
+            utils.setOAuthState(session, this.providerName, state);
+
+            // Create the authorization URL
+            let authUrl = this.authProvider.getAuthorizationUrl(state);
+
+            // Build the sign-in url
+            let signinUrl = config.get("app.baseUri") + `/html/auth-start.html?authorizationUrl=${encodeURIComponent(authUrl)}`;
+
+            // The fallbackUrl specifies the page to be opened on mobile, until they support automatically passing the
+            // verification code via notifySuccess(). If you want to support only this protocol, then you can give the
+            // URL of an error page that directs the user to sign in using the desktop app. The flow demonstrated here
+            // gracefully falls back to asking the user to enter the verification code manually, so we use the same
+            // signin URL as the fallback URL.
+            let signinUrlWithFallback = signinUrl + `&fallbackUrl=${encodeURIComponent(signinUrl)}`;
+
+            // Send card with signin action
+            let msg = new builder.Message(session)
+                .addAttachment(new builder.HeroCard(session)
+                    .text(`Click below to sign in to ${this.providerDisplayName}`)
+                    .buttons([
+                        new builder.CardAction(session)
+                            .type("signin")
+                            .value(signinUrlWithFallback)
+                            .title("Sign in"),
+                    ]));
+            session.send(msg);
+
+            // The auth flow resumes when we handle the identity provider's OAuth callback in AuthBot.handleOAuthCallback()
+        }
+    }
+
+    // Handle user logout request
+    private async handleLogout(session: builder.Session): Promise<void> {
+        if (!utils.getUserToken(session, this.providerName)) {
+            session.send(`You're not currently signed in.`);
+        } else {
+            utils.setUserToken(session, this.providerName, null);
+            session.send(`You're now signed out of ${this.providerDisplayName}.`);
+        }
+        session.endDialog();
     }
 }

@@ -7,7 +7,11 @@
         "appId": "<app_id>",
         "appPassword": "<app_password>"
     },
-    "storage": "memory",
+    "mongoDb": {
+        "connectionString": "<secret>",
+        "botStateCollection": "BotState"
+    },
+    "storage": "mongoDb",
     "features": {
     }
 }

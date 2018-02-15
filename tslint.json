@@ -22,7 +22,7 @@
       "static-before-instance",
       "variables-before-functions"
     ],
-    "no-angle-bracket-type-assertion": true,
+    "no-angle-bracket-type-assertion": false,
     "no-any": false,
     "no-arg": true,
     "no-bitwise": true,
@@ -116,8 +116,7 @@
       "check-operator",
       "check-module",
       "check-separator",
-      "check-type",
-      "check-typecast"
+      "check-type"
     ]
   }
 }

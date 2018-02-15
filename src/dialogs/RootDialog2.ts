@@ -29,143 +29,6 @@ import * as trips from "../trips/TripsApi";
 import * as mongodbTrips from "../trips/MongoDbTripsApi";
 import * as teams from "../TeamsApi";
 import * as utils from "../utils";
-let uuidv4 = require("uuid/v4");
-
-const createTripsRegExp = /createTrips/i;
-
-const tripTemplates: trips.Trip[] = [
-    {
-        tripId: null,
-        dxbDepartureTime: new Date("2018-02-08 14:25:00 UTC+4"),
-        flights: [
-            {
-                flightNumber: "051",
-                origin: "DXB",
-                destination: "MUC",
-            },
-            {
-                flightNumber: "052",
-                origin: "MUC",
-                destination: "DXB",
-            },
-        ],
-        crewMembers: [
-            {
-                staffId: "292062",
-                rosterGrade: "FG1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "378718",
-                rosterGrade: "FG1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "431620",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "420501",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "431400",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "450986",
-                rosterGrade: "GR2",
-                aadObjectId: "",
-            },
-            {
-                staffId: "430109",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "381830",
-                rosterGrade: "SFS",
-                aadObjectId: "",
-            },
-            {
-                staffId: "434722",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "422970",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "448210",
-                rosterGrade: "GR2",
-                aadObjectId: "",
-            },
-            {
-                staffId: "380824",
-                rosterGrade: "PUR",
-                aadObjectId: "",
-            },
-        ],
-    },
-    {
-        tripId: null,
-        dxbDepartureTime: new Date("2018-02-08 10:20:00 UTC+4"),
-        flights: [
-            {
-                flightNumber: "209",
-                origin: "DXB",
-                destination: "ATH",
-            },
-            {
-                flightNumber: "209",
-                origin: "ATH",
-                destination: "EWR",
-            },
-            {
-                flightNumber: "210",
-                origin: "EWR",
-                destination: "ATH",
-            },
-            {
-                flightNumber: "210",
-                origin: "ATH",
-                destination: "DXB",
-            },
-        ],
-        crewMembers: [
-            {
-                staffId: "382244",
-                rosterGrade: "PUR",
-                aadObjectId: "",
-            },
-            {
-                staffId: "420873",
-                rosterGrade: "GR1",
-                aadObjectId: "",
-            },
-            {
-                staffId: "429465",
-                rosterGrade: "GR2",
-                aadObjectId: "",
-            },
-            {
-                staffId: "442614",
-                rosterGrade: "GR2",
-                aadObjectId: "",
-            },
-            {
-                staffId: "441994",
-                rosterGrade: "GR2",
-                aadObjectId: "",
-            },
-        ],
-    },
-];
 
 // Root dialog provides choices in identity providers
 export class RootDialog extends builder.IntentDialog
@@ -179,13 +42,12 @@ export class RootDialog extends builder.IntentDialog
     // Register the dialog with the bot
     public register(bot: builder.UniversalBot): void {
         bot.dialog(constants.DialogId.Root, this);
-        new AzureADv1Dialog().register(bot, this);
 
+        this.onBegin((session, args, next) => { this.onDialogBegin(session, args, next); });
         this.onDefault((session) => { this.onMessageReceived(session); });
-        this.matches(/login/i, constants.DialogId.AzureADv1, "login");
-        this.matches(/logout/i, constants.DialogId.AzureADv1, "logout");
-        this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
-        this.matches(/deleteTrips/i, (session) => { this.handleDeleteTrips(session); });
+
+        new AzureADv1Dialog().register(bot, this);
+        this.matches(/azureADv1/i, constants.DialogId.AzureADv1);
         this.matches(/triggerSetup/i, (session) => { this.handleTriggerSetup(session); });
         this.matches(/createTeam/i, (session) => { this.handleCreateTeam(session); });
         this.matches(/archiveTeam/i, (session) => { this.handleArchiveTeam(session); });
@@ -195,42 +57,6 @@ export class RootDialog extends builder.IntentDialog
     // Handle resumption of dialog
     public dialogResumed<T>(session: builder.Session, result: builder.IDialogResult<T>): void {
         session.send("Ok, tell me what to do");
-    }
-
-    private async handleCreateTrips(session: builder.Session): Promise<void> {
-        // By default create trips that depart Dubai on the next day
-        let baseDate = new Date(new Date().valueOf() + (24 * 60 * 60 * 1000));
-        let fakeTrips: trips.Trip[] = tripTemplates.map((trip) => {
-            let departureTime = trip.dxbDepartureTime;
-            return {
-                ...trip,
-                tripId: <string>uuidv4(),
-                dxbDepartureTime: new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), baseDate.getUTCDate(), departureTime.getUTCHours(), departureTime.getUTCMinutes())),
-            };
-        });
-        let addPromises = fakeTrips.map((trip) => {
-            return (<trips.ITripsTest><any>this.tripsApi).addTripAsync(trip);
-        });
-
-        try {
-            await Promise.all(addPromises);
-
-            let departureTimes = fakeTrips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
-            session.send(`Created ${fakeTrips.length} trips that depart at the following times ${departureTimes}`);
-        } catch (e) {
-            console.log(e);
-            session.send(`An error occurred while creating trips: ${e.message}`);
-        }
-    }
-
-    private async handleDeleteTrips(session: builder.Session): Promise<void> {
-        try {
-            await (<trips.ITripsTest><any>this.tripsApi).deleteAllTripsAsync();
-            session.send(`Deleted all trips from the trip database.`);
-        } catch (e) {
-            console.log(e);
-            session.send(`An error occurred while deleting trips: ${e.message}`);
-        }
     }
 
     private async handleTriggerSetup(session: builder.Session): Promise<void> {
@@ -408,8 +234,34 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
+    // Handle start of dialog
+    private async onDialogBegin(session: builder.Session, args: any, next: () => void): Promise<void> {
+        session.dialogData.isFirstTurn = true;
+        this.promptForIdentityProvider(session);
+        next();
+    }
+
     // Handle message
     private async onMessageReceived(session: builder.Session): Promise<void> {
-        session.send("I didn't understand that.");
+        if (!session.dialogData.isFirstTurn) {
+            // Unrecognized input
+            session.send("I didn't understand that.");
+            this.promptForIdentityProvider(session);
+        } else {
+            delete session.dialogData.isFirstTurn;
+        }
+    }
+
+    // Prompt the user to pick an identity provider
+    private promptForIdentityProvider(session: builder.Session): void {
+        let msg = new builder.Message(session)
+            .addAttachment(new builder.ThumbnailCard(session)
+                .title("Select an identity provider")
+                .buttons([
+                    builder.CardAction.messageBack(session, "{}", "AzureAD (v1)")
+                        .displayText("AzureAD (v1)")
+                        .text("AzureADv1"),
+                ]));
+        session.send(msg);
     }
 }
