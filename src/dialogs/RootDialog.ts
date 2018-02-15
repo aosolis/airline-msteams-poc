@@ -23,6 +23,7 @@
 
 import * as config from "config";
 import * as builder from "botbuilder";
+import * as moment from "moment";
 import * as constants from "../constants";
 import { AzureADv1Dialog } from "./AzureADv1Dialog";
 import * as trips from "../trips/TripsApi";
@@ -31,7 +32,8 @@ import * as teams from "../TeamsApi";
 import * as utils from "../utils";
 let uuidv4 = require("uuid/v4");
 
-const createTripsRegExp = /createTrips/i;
+const createTripsRegExp = /^createTrips(.*)$/i;
+const triggerTimeRegExp = /^triggerTime(.*)$/i;
 
 const tripTemplates: trips.Trip[] = [
     {
@@ -186,6 +188,7 @@ export class RootDialog extends builder.IntentDialog
         this.matches(/logout/i, constants.DialogId.AzureADv1, "logout");
         this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
         this.matches(/deleteTrips/i, (session) => { this.handleDeleteTrips(session); });
+        this.matches(triggerTimeRegExp, (session) => { this.handleTimeTrigger(session); });
         this.matches(/triggerSetup/i, (session) => { this.handleTriggerSetup(session); });
         this.matches(/createTeam/i, (session) => { this.handleCreateTeam(session); });
         this.matches(/archiveTeam/i, (session) => { this.handleArchiveTeam(session); });
@@ -198,8 +201,12 @@ export class RootDialog extends builder.IntentDialog
     }
 
     private async handleCreateTrips(session: builder.Session): Promise<void> {
-        // By default create trips that depart Dubai on the next day
-        let baseDate = new Date(new Date().valueOf() + (24 * 60 * 60 * 1000));
+        let dateString = createTripsRegExp.exec(session.message.text)[1];
+        let inputDate = moment.utc(dateString);
+
+        // By default create trips that depart Dubai a week from now
+        let baseDate = inputDate.isValid() ? inputDate.toDate() : new Date(new Date().valueOf() + (7 * 24 * 60 * 60 * 1000));
+
         let fakeTrips: trips.Trip[] = tripTemplates.map((trip) => {
             let departureTime = trip.dxbDepartureTime;
             return {
@@ -231,6 +238,11 @@ export class RootDialog extends builder.IntentDialog
             console.log(e);
             session.send(`An error occurred while deleting trips: ${e.message}`);
         }
+    }
+
+    private async handleTimeTrigger(session: builder.Session): Promise<void> {
+        let flight = await this.tripsApi.getTripAsync(null);
+        await this.createTeamForTrip(session, flight);
     }
 
     private async handleTriggerSetup(session: builder.Session): Promise<void> {
