@@ -241,8 +241,22 @@ export class RootDialog extends builder.IntentDialog
     }
 
     private async handleTimeTrigger(session: builder.Session): Promise<void> {
-        let flight = await this.tripsApi.getTripAsync(null);
-        await this.createTeamForTrip(session, flight);
+        let dateString = triggerTimeRegExp.exec(session.message.text)[1];
+        let inputDate = moment.utc(dateString);
+
+        // By default simulate a time trigger for the current time
+        let triggerTime = inputDate.isValid() ? inputDate.toDate() : moment.utc().toDate();
+        session.send(`Simulating a time trigger for ${triggerTime.toUTCString()}`);
+
+        try {
+            // Find trips that are departing in the next week
+            let trips = await this.tripsApi.findTripsDepartingInRangeAsync(triggerTime, moment(triggerTime).add(7, "d").toDate());
+            let departureTimes = trips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
+            session.send(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
+        } catch (e) {
+            console.log(e);
+            session.send(`An error occurred while processing time trigger at ${triggerTime.toUTCString()}: ${e.message}`);
+        }
     }
 
     private async handleTriggerSetup(session: builder.Session): Promise<void> {
