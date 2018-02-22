@@ -37,6 +37,7 @@ let uuidv4 = require("uuid/v4");
 
 const createTripsRegExp = /^createTrips(.*)$/i;
 const triggerTimeRegExp = /^triggerTime(.*)$/i;
+const addRemoveCrewRegExp = /^(add|remove)Crew (.*) (.*)$/i;
 
 const daysInAdvanceToCreateTrips = 7;       // Create teams for trips departing X days in the future
 const daysInPastToMonitorTrips = 7;         // Actively monitor future trips and trips that departed in the past Y days
@@ -176,6 +177,7 @@ const tripTemplates: trips.Trip[] = [
     },
 ];
 
+// Default settings for new teams
 const teamSettings: teams.Team = {
     memberSettings: {
         allowAddRemoveApps: false,
@@ -214,6 +216,7 @@ export class RootDialog extends builder.IntentDialog
         // Commands to manipulate trip database
         this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
         this.matches(/deleteTrips/i, (session) => { this.handleDeleteTrips(session); });
+        this.matches(addRemoveCrewRegExp, (session) => { this.handleAddRemoveCrew(session); });
 
         // Commands to simulate a time trigger
         this.matches(triggerTimeRegExp, (session) => { this.handleTimeTrigger(session); });
@@ -252,8 +255,8 @@ export class RootDialog extends builder.IntentDialog
         try {
             await Promise.all(addPromises);
 
-            let departureTimes = fakeTrips.map(trip => trip.departureTime.toUTCString()).join(", ");
-            session.send(`Created ${fakeTrips.length} trips that depart at the following times ${departureTimes}`);
+            let tripInfo = fakeTrips.map(trip => `${this.createDisplayNameForTrip(trip)} (${trip.tripId})`).join(", ");
+            session.send(`Created ${fakeTrips.length} trips: ${tripInfo}`);
         } catch (e) {
             console.error(`Error creating trips: ${e.message}`, e);
             session.send(`An error occurred while creating trips: ${e.message}`);
@@ -268,6 +271,41 @@ export class RootDialog extends builder.IntentDialog
         } catch (e) {
             console.error(`Error deleting trips: ${e.message}`, e);
             session.send(`An error occurred while deleting trips: ${e.message}`);
+        }
+    }
+
+    // Add or remove a crew member from a trip
+    private async handleAddRemoveCrew(session: builder.Session): Promise<void> {
+        let match = addRemoveCrewRegExp.exec(session.message.text);
+        let command = match[1];
+        let tripId = match[2];
+        let crewMemberId = match[3];
+
+        let trip = await this.tripsApi.getTripAsync(tripId);
+        if (!trip) {
+            session.send(`The trip with id ${tripId} could not be found`);
+            return;
+        }
+
+        let tripName = this.createDisplayNameForTrip(trip);
+
+        switch (command) {
+            case "add":
+                let crewMember: trips.CrewMember = {
+                    aadObjectId : crewMemberId,
+                    staffId: "XXX",
+                    rosterGrade: "GR1",
+                };
+                trip.crewMembers = _(trip.crewMembers).push(crewMember).uniqBy("aadObjectId").value();
+                await (<trips.ITripsTest><any>this.tripsApi).addOrUpdateTripAsync(trip);
+                session.send(`Crew member added to trip roster for ${tripName}`);
+                break;
+
+            case "remove":
+                trip.crewMembers = trip.crewMembers.filter(member => member.aadObjectId !== crewMemberId);
+                await (<trips.ITripsTest><any>this.tripsApi).addOrUpdateTripAsync(trip);
+                session.send(`Crew member removed from trip roster for ${tripName}`);
+                break;
         }
     }
 
@@ -336,7 +374,7 @@ export class RootDialog extends builder.IntentDialog
     }
 
     private createDisplayNameForTrip(trip: trips.Trip): string {
-        let flightNumbers = _.uniq(trip.flights.map(flight => flight.flightNumber)).join("/");
+        let flightNumbers = _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
         let dxbDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
         return `EK${flightNumbers} ${route} ${dxbDepartureDate}`;
