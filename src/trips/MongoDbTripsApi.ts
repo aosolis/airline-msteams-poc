@@ -25,6 +25,8 @@ import * as mongodb from "mongodb";
 import * as winston from "winston";
 import * as trips from "./TripsApi";
 
+const tripsCollectionName = "Trips";
+
 export class MongoDbTripsApi implements trips.ITripsApi, trips.ITripsTest {
 
     private initializePromise: Promise<void>;
@@ -32,7 +34,6 @@ export class MongoDbTripsApi implements trips.ITripsApi, trips.ITripsTest {
     private tripsCollection: mongodb.Collection;
 
     constructor(
-        private collectionName: string,
         private connectionString: string) {
     }
 
@@ -91,7 +92,7 @@ export class MongoDbTripsApi implements trips.ITripsApi, trips.ITripsTest {
         if (!this.mongoDb) {
             try {
                 this.mongoDb = await mongodb.MongoClient.connect(this.connectionString);
-                this.tripsCollection = await this.mongoDb.collection(this.collectionName);
+                this.tripsCollection = await this.mongoDb.collection(tripsCollectionName);
 
                 // Set up indexes
                 await this.tripsCollection.createIndex({ tripId: 1 });

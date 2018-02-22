@@ -24,7 +24,7 @@
 import * as trips from "../trips/TripsApi";
 
 // =========================================================
-// Group data storage
+// Application data storage
 // =========================================================
 
 export interface GroupData {
@@ -35,10 +35,26 @@ export interface GroupData {
     tripSnapshot: trips.Trip;
 }
 
-export interface IGroupDataStorage {
+// Interface to app data store, which tracks info about teams and general app data
+export interface IAppDataStore {
+    // Add or update info about a team that app created
     addOrUpdateGroupDataAsync(groupData: GroupData): Promise<void>;
+
+    // Delete info about a team that app created
     deleteGroupDataAsync(groupId: string): Promise<void>;
+
+    // Find team info given a group (team) id
     getGroupDataByGroupAsync(groupId: string): Promise<GroupData>;
+
+    // Find team info given a trip id
     getGroupDataByTripAsync(tripId: string): Promise<GroupData>;
+
+    // Find active (not archived) teans that were created before the given time
     findActiveGroupsCreatedBeforeTimeAsync(endTime: Date): Promise<GroupData[]>;
+
+    // Get app metadata
+    getAppDataAsync(key: string): Promise<any>;
+
+    // Set app metadata
+    setAppDataAsync(key: string, data: any): Promise<void>;
 }

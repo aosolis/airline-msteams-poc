@@ -23,16 +23,19 @@
 
 import * as mongodb from "mongodb";
 import * as winston from "winston";
-import { GroupData, IGroupDataStorage } from "./GroupDataStorage";
+import { GroupData, IAppDataStore } from "./AppDataStore";
 
-export class MongoDbGroupDataStorage implements IGroupDataStorage {
+const teamsCollectionName = "Teams";
+const appDataCollectionName = "AppData";
+
+export class MongoDbAppDataStore implements IAppDataStore {
 
     private initializePromise: Promise<void>;
     private mongoDb: mongodb.Db;
-    private tripsCollection: mongodb.Collection;
+    private teamsCollection: mongodb.Collection;
+    private appDataCollection: mongodb.Collection;
 
     constructor(
-        private collectionName: string,
         private connectionString: string) {
     }
 
@@ -44,28 +47,28 @@ export class MongoDbGroupDataStorage implements IGroupDataStorage {
         }
 
         let filter = { groupId: groupData.groupId };
-        await this.tripsCollection.updateOne(filter, groupData, { upsert: true });
+        await this.teamsCollection.updateOne(filter, groupData, { upsert: true });
     }
 
     public async deleteGroupDataAsync(groupId: string): Promise<void> {
         await this.initialize();
 
         let filter = { groupId: groupId };
-        return await this.tripsCollection.remove(filter);
+        return await this.teamsCollection.remove(filter);
     }
 
     public async getGroupDataByGroupAsync(groupId: string): Promise<GroupData> {
         await this.initialize();
 
         let filter = { groupId: groupId };
-        return await this.tripsCollection.findOne(filter);
+        return await this.teamsCollection.findOne(filter);
     }
 
     public async getGroupDataByTripAsync(tripId: string): Promise<GroupData> {
         await this.initialize();
 
         let filter = { tripId: tripId };
-        return await this.tripsCollection.findOne(filter);
+        return await this.teamsCollection.findOne(filter);
     }
 
     public async findActiveGroupsCreatedBeforeTimeAsync(endTime: Date): Promise<GroupData[]> {
@@ -80,7 +83,7 @@ export class MongoDbGroupDataStorage implements IGroupDataStorage {
             },
         };
         return await new Promise<GroupData[]>((resolve, reject) => {
-            this.tripsCollection.find(filter).toArray((error, documents) => {
+            this.teamsCollection.find(filter).toArray((error, documents) => {
                 if (error) {
                     reject(error);
                 } else {
@@ -88,6 +91,25 @@ export class MongoDbGroupDataStorage implements IGroupDataStorage {
                 }
             });
         });
+    }
+
+    public async getAppDataAsync(key: string): Promise<any> {
+        await this.initialize();
+
+        let filter = { key: key };
+        let document = await this.appDataCollection.findOne(filter);
+        return document && document.data;
+    }
+
+    public async setAppDataAsync(key: string, data: any): Promise<void> {
+        await this.initialize();
+
+        let filter = { key: key };
+        let document = {
+            key: key,
+            data: data,
+        };
+        await this.teamsCollection.updateOne(filter, document, { upsert: true });
     }
 
     // Returns a promise that is resolved when this instance is initialized
@@ -103,11 +125,14 @@ export class MongoDbGroupDataStorage implements IGroupDataStorage {
         if (!this.mongoDb) {
             try {
                 this.mongoDb = await mongodb.MongoClient.connect(this.connectionString);
-                this.tripsCollection = await this.mongoDb.collection(this.collectionName);
+                this.teamsCollection = await this.mongoDb.collection(teamsCollectionName);
+                this.appDataCollection = await this.mongoDb.collection(appDataCollectionName);
 
                 // Set up indexes
-                await this.tripsCollection.createIndex({ tripId: 1 });
-                await this.tripsCollection.createIndex({ lastUpdate: 1 });
+                await this.teamsCollection.createIndex({ tripId: 1 });
+                await this.teamsCollection.createIndex({ groupId: 1 });
+                await this.teamsCollection.createIndex({ creationTime: 1 });
+                await this.appDataCollection.createIndex({ key: 1 });
             } catch (e) {
                 winston.error(`Error initializing MongoDB: ${e.message}`, e);
                 this.close();
@@ -118,7 +143,7 @@ export class MongoDbGroupDataStorage implements IGroupDataStorage {
 
     // Close the connection to the database
     private close(): void {
-        this.tripsCollection = null;
+        this.teamsCollection = null;
         if (this.mongoDb) {
             this.mongoDb.close();
             this.mongoDb = null;

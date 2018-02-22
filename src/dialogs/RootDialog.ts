@@ -27,11 +27,11 @@ import * as builder from "botbuilder";
 import * as moment from "moment";
 import * as constants from "../constants";
 import { AzureADv1Dialog } from "./AzureADv1Dialog";
-import * as trips from "../trips/TripsApi";
-import * as mongodbTrips from "../trips/MongoDbTripsApi";
 import * as teams from "../TeamsApi";
-import { GroupData, IGroupDataStorage } from "../storage/GroupDataStorage";
-import { MongoDbGroupDataStorage } from "../storage/MongoDbGroupDataStorage";
+import * as trips from "../trips/TripsApi";
+import { MongoDbTripsApi } from "../trips/MongoDbTripsApi";
+import { GroupData, IAppDataStore } from "../storage/AppDataStore";
+import { MongoDbAppDataStore } from "../storage/MongoDbAppDataStore";
 let uuidv4 = require("uuid/v4");
 
 const createTripsRegExp = /^createTrips(.*)$/i;
@@ -192,9 +192,9 @@ const teamSettings: teams.Team = {
 // Root dialog provides choices in identity providers
 export class RootDialog extends builder.IntentDialog
 {
-    private tripsApi: trips.ITripsApi = new mongodbTrips.MongoDbTripsApi("Trips", config.get("mongoDb.connectionString"));
+    private tripsApi: trips.ITripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
     private teamsApi: teams.TeamsApi = new teams.TeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
-    private groupDataStorage: IGroupDataStorage = new MongoDbGroupDataStorage("Teams", config.get("mongoDb.connectionString"));
+    private groupDataStorage: IAppDataStore = new MongoDbAppDataStore(config.get("mongoDb.connectionString"));
 
     constructor() {
         super();
