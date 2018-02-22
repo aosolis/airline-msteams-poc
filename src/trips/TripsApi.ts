@@ -27,7 +27,7 @@
 
 export interface Trip {
     tripId: string;
-    dxbDepartureTime: Date;
+    departureTime: Date;
     flights: Flight[];
     crewMembers: CrewMember[];
 }

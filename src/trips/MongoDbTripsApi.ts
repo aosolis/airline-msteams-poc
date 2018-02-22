@@ -49,7 +49,7 @@ export class MongoDbTripsApi implements trips.ITripsApi, trips.ITripsTest {
         await this.initialize();
 
         let filter = {
-            dxbDepartureTime: {
+            departureTime: {
                 "$gte": startTime,
                 "$lte": endTime,
             },

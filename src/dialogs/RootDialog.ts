@@ -44,7 +44,7 @@ const daysInPastToArchiveTrips = 14;        // Archive teams for trips that depa
 const tripTemplates: trips.Trip[] = [
     {
         tripId: null,
-        dxbDepartureTime: new Date("2018-02-08 14:25:00 UTC+4"),
+        departureTime: new Date("2018-02-08 14:25:00 UTC+4"),
         flights: [
             {
                 flightNumber: "051",
@@ -122,7 +122,7 @@ const tripTemplates: trips.Trip[] = [
     },
     {
         tripId: null,
-        dxbDepartureTime: new Date("2018-02-08 10:20:00 UTC+4"),
+        departureTime: new Date("2018-02-08 10:20:00 UTC+4"),
         flights: [
             {
                 flightNumber: "209",
@@ -228,11 +228,11 @@ export class RootDialog extends builder.IntentDialog
         let baseDate = inputDate.isValid() ? inputDate.toDate() : new Date(new Date().valueOf() + (7 * 24 * 60 * 60 * 1000));
 
         let fakeTrips: trips.Trip[] = tripTemplates.map((trip) => {
-            let departureTime = trip.dxbDepartureTime;
+            let departureTime = trip.departureTime;
             return {
                 ...trip,
                 tripId: <string>uuidv4(),
-                dxbDepartureTime: new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), baseDate.getUTCDate(), departureTime.getUTCHours(), departureTime.getUTCMinutes())),
+                departureTime: new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), baseDate.getUTCDate(), departureTime.getUTCHours(), departureTime.getUTCMinutes())),
             };
         });
         let addPromises = fakeTrips.map((trip) => {
@@ -242,7 +242,7 @@ export class RootDialog extends builder.IntentDialog
         try {
             await Promise.all(addPromises);
 
-            let departureTimes = fakeTrips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
+            let departureTimes = fakeTrips.map(trip => trip.departureTime.toUTCString()).join(", ");
             session.send(`Created ${fakeTrips.length} trips that depart at the following times ${departureTimes}`);
         } catch (e) {
             console.error(`Error creating trips: ${e.message}`, e);
@@ -273,7 +273,7 @@ export class RootDialog extends builder.IntentDialog
             // Archive old teams
             let maxDepartureTimeToArchive = moment(triggerTime).subtract(daysInPastToArchiveTrips, "d").toDate();
             let groupsToArchive = (await this.groupDataStorage.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
-                .filter(groupData => groupData.tripSnapshot.dxbDepartureTime < maxDepartureTimeToArchive);
+                .filter(groupData => groupData.tripSnapshot.departureTime < maxDepartureTimeToArchive);
 
             let groupIds = groupsToArchive.map(groupData => groupData.groupId).join(", ");
             console.log(`Found ${groupsToArchive.length} groups to archive: ${groupIds}`);
@@ -296,7 +296,7 @@ export class RootDialog extends builder.IntentDialog
             let maxDepartureTimeToCreate = moment(triggerTime).add(daysInAdvanceToCreateTrips, "d").toDate();
             let trips = await this.tripsApi.findTripsDepartingInRangeAsync(triggerTime, maxDepartureTimeToCreate);
 
-            let departureTimes = trips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
+            let departureTimes = trips.map(trip => trip.departureTime.toUTCString()).join(", ");
             console.log(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
 
             let teamCreatePromises = trips.map(async (trip) => {
@@ -312,7 +312,7 @@ export class RootDialog extends builder.IntentDialog
                     };
                     await this.groupDataStorage.addOrUpdateGroupDataAsync(newGroupData);
 
-                    console.log(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.dxbDepartureTime.toUTCString()}`);
+                    console.log(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.departureTime.toUTCString()}`);
                 }
             });
             await Promise.all(teamCreatePromises);
@@ -328,7 +328,7 @@ export class RootDialog extends builder.IntentDialog
     private createDisplayNameForTrip(trip: trips.Trip): string {
         let flightNumbers = _.uniq(trip.flights.map(flight => flight.flightNumber)).join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
-        let dxbDepartureDate = moment(trip.dxbDepartureTime).utcOffset(240).format("YYYY-MM-DD");
+        let dxbDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
         return `EK${flightNumbers} ${route} ${dxbDepartureDate}`;
     }
 
