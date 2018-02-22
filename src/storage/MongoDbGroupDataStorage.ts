@@ -84,7 +84,7 @@ export class MongoDbGroupDataStorage implements IGroupDataStorage {
                 if (error) {
                     reject(error);
                 } else {
-                    resolve(documents);
+                    resolve(documents || []);
                 }
             });
         });

@@ -44,12 +44,20 @@ export interface CrewMember {
     aadObjectId: string;
 }
 
+// Interface to the trip database
 export interface ITripsApi {
+    // Get information about the trip with the given id
     getTripAsync(tripId: string): Promise<Trip>;
+
+    // Find trips that are departing in the given time range
     findTripsDepartingInRangeAsync(startTime: Date, endTime: Date): Promise<Trip[]>;
 }
 
+// Test interface to the trip database
 export interface ITripsTest {
-    addTripAsync(trip: Trip): Promise<void>;
+    // Add or update a trip
+    addOrUpdateTripAsync(trip: Trip): Promise<void>;
+
+    // Delete all trips in the database
     deleteAllTripsAsync(): Promise<void>;
 }

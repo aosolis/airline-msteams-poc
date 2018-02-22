@@ -37,6 +37,10 @@ let uuidv4 = require("uuid/v4");
 const createTripsRegExp = /^createTrips(.*)$/i;
 const triggerTimeRegExp = /^triggerTime(.*)$/i;
 
+const daysInAdvanceToCreateTrips = 7;       // Create teams for trips departing X days in the future
+const daysInPastToMonitorTrips = 7;         // Actively monitor future trips and trips that departed in the past Y days
+const daysInPastToArchiveTrips = 14;        // Archive teams for trips that departed more that Z days ago
+
 const tripTemplates: trips.Trip[] = [
     {
         tripId: null,
@@ -198,24 +202,22 @@ export class RootDialog extends builder.IntentDialog
 
     // Register the dialog with the bot
     public register(bot: builder.UniversalBot): void {
+        // Register dialogs
         bot.dialog(constants.DialogId.Root, this);
         new AzureADv1Dialog().register(bot, this);
 
-        this.onDefault((session) => { this.onMessageReceived(session); });
+        // Commands to get user token for delegated consent
         this.matches(/login/i, constants.DialogId.AzureADv1, "login");
         this.matches(/logout/i, constants.DialogId.AzureADv1, "logout");
+
+        // Commands to manipulate trip database
         this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
         this.matches(/deleteTrips/i, (session) => { this.handleDeleteTrips(session); });
-        this.matches(triggerTimeRegExp, (session) => { this.handleTimeTrigger(session); });
-        this.matches(/triggerSetup/i, (session) => { this.handleTriggerSetup(session); });
-        this.matches(/createTeam/i, (session) => { this.handleCreateTeam(session); });
-        this.matches(/archiveTeam/i, (session) => { this.handleArchiveTeam(session); });
-        this.matches(/deleteTeam/i, (session) => { this.handleDeleteTeam(session); });
-    }
 
-    // Handle resumption of dialog
-    public dialogResumed<T>(session: builder.Session, result: builder.IDialogResult<T>): void {
-        session.send("Ok, tell me what to do");
+        // Commands to simulate a time trigger
+        this.matches(triggerTimeRegExp, (session) => { this.handleTimeTrigger(session); });
+
+        this.onDefault((session) => { this.onMessageReceived(session); });
     }
 
     private async handleCreateTrips(session: builder.Session): Promise<void> {
@@ -234,7 +236,7 @@ export class RootDialog extends builder.IntentDialog
             };
         });
         let addPromises = fakeTrips.map((trip) => {
-            return (<trips.ITripsTest><any>this.tripsApi).addTripAsync(trip);
+            return (<trips.ITripsTest><any>this.tripsApi).addOrUpdateTripAsync(trip);
         });
 
         try {
@@ -243,17 +245,18 @@ export class RootDialog extends builder.IntentDialog
             let departureTimes = fakeTrips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
             session.send(`Created ${fakeTrips.length} trips that depart at the following times ${departureTimes}`);
         } catch (e) {
-            console.log(e);
+            console.error(`Error creating trips: ${e.message}`, e);
             session.send(`An error occurred while creating trips: ${e.message}`);
         }
     }
 
+    // Delete all trips in the trip database
     private async handleDeleteTrips(session: builder.Session): Promise<void> {
         try {
             await (<trips.ITripsTest><any>this.tripsApi).deleteAllTripsAsync();
             session.send(`Deleted all trips from the trip database.`);
         } catch (e) {
-            console.log(e);
+            console.error(`Error deleting trips: ${e.message}`, e);
             session.send(`An error occurred while deleting trips: ${e.message}`);
         }
     }
@@ -262,20 +265,45 @@ export class RootDialog extends builder.IntentDialog
         let dateString = triggerTimeRegExp.exec(session.message.text)[1];
         let inputDate = moment.utc(dateString);
 
-        // By default simulate a time trigger for the current time
+        // By default simulate a time trigger for the current time, allowing override
         let triggerTime = inputDate.isValid() ? inputDate.toDate() : moment.utc().toDate();
-        session.send(`Simulating a time trigger for ${triggerTime.toUTCString()}`);
+        console.log(`Simulating a time trigger for ${triggerTime.toUTCString()}`);
 
         try {
-            // Find trips to create
-            let trips = await this.tripsApi.findTripsDepartingInRangeAsync(triggerTime, moment(triggerTime).add(7, "d").toDate());
+            // Archive old teams
+            let maxDepartureTimeToArchive = moment(triggerTime).subtract(daysInPastToArchiveTrips, "d").toDate();
+            let groupsToArchive = (await this.groupDataStorage.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
+                .filter(groupData => groupData.tripSnapshot.dxbDepartureTime < maxDepartureTimeToArchive);
+
+            let groupIds = groupsToArchive.map(groupData => groupData.groupId).join(", ");
+            console.log(`Found ${groupsToArchive.length} groups to archive: ${groupIds}`);
+
+            let teamArchivePromises = groupsToArchive.map(async (groupData) => {
+                try
+                {
+                    await this.archiveTeamAsync(groupData.groupId);
+
+                    groupData.archivalTime = triggerTime;
+                    await this.groupDataStorage.addOrUpdateGroupDataAsync(groupData);
+                }
+                catch (e) {
+                    console.error(`Error archiving group ${groupData.groupId}: ${e.message}`, e);
+                }
+            });
+            await Promise.all(teamArchivePromises);
+
+            // Create new teams
+            let maxDepartureTimeToCreate = moment(triggerTime).add(daysInAdvanceToCreateTrips, "d").toDate();
+            let trips = await this.tripsApi.findTripsDepartingInRangeAsync(triggerTime, maxDepartureTimeToCreate);
+
             let departureTimes = trips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
-            session.send(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
+            console.log(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
 
             let teamCreatePromises = trips.map(async (trip) => {
                 let groupData = await this.groupDataStorage.getGroupDataByTripAsync(trip.tripId);
                 if (!groupData) {
-                    let groupId = await this.createTeamForTripAsync(session, trip);
+                    let groupId = await this.createTeamForTripAsync(trip);
+
                     let newGroupData: GroupData = {
                         groupId:  groupId,
                         tripId: trip.tripId,
@@ -283,82 +311,18 @@ export class RootDialog extends builder.IntentDialog
                         creationTime: triggerTime,
                     };
                     await this.groupDataStorage.addOrUpdateGroupDataAsync(newGroupData);
-                    session.send(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.dxbDepartureTime.toUTCString()}`);
+
+                    console.log(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.dxbDepartureTime.toUTCString()}`);
                 }
             });
             await Promise.all(teamCreatePromises);
 
-            // Find teams to archive
-            let groupsToArchive = await this.groupDataStorage.findActiveGroupsCreatedBeforeTimeAsync(moment(triggerTime).subtract(14, "d").toDate());
-            let groupIds = groupsToArchive.map(groupData => groupData.groupId).join(", ");
-            session.send(`Found ${groupsToArchive.length} groups to archive: ${groupIds}`);
-
-            let teamArchivePromises = groupsToArchive.map(async (groupData) => {
-                try
-                {
-                    await this.archiveTeamAsync(groupData.groupId);
-                    groupData.archivalTime = triggerTime;
-                    await this.groupDataStorage.addOrUpdateGroupDataAsync(groupData);
-                }
-                catch (e) {
-                    session.send(`Error archiving group ${groupData.groupId}: ${e.message}`);
-                }
-            });
-            await Promise.all(teamArchivePromises);
+            session.send(`Finished processing time trigger for ${triggerTime.toUTCString()}`);
         } catch (e) {
-            console.log(e);
-            session.send(`An error occurred while processing time trigger at ${triggerTime.toUTCString()}: ${e.message}`);
+            let errorMessage = `An error occurred while processing time trigger at ${triggerTime.toUTCString()}: ${e.message}`;
+            console.error(errorMessage, e);
+            session.send(errorMessage);
         }
-    }
-
-    private async handleTriggerSetup(session: builder.Session): Promise<void> {
-        let flight = await this.tripsApi.getTripAsync(null);
-        await this.createTeamForTripAsync(session, flight);
-    }
-
-    private async handleCreateTeam(session: builder.Session): Promise<void> {
-        // Create the team
-        let team: teams.Team;
-        try {
-            team = await this.teamsApi.createTeamAsync("Test Team", "Test Team Description", "test100", teamSettings);
-            session.userData.teamId = team.id;
-            session.send(`Created a new team, group id is ${team.id}`);
-        } catch (e) {
-            session.send(`Error creating team: ${e.message}`);
-            return;
-        }
-
-        // Set up channels
-        let channelsToAdd: teams.Channel[] = [
-            {
-                displayName: "TripTrip",
-                description: "Aircraft and flight path",
-            },
-            {
-                displayName: "Crew",
-            },
-        ];
-        let channelsAddPromises = channelsToAdd.map(async channel => {
-            try {
-                await this.teamsApi.createChannelAsync(team.id, channel.displayName, channel.description);
-            } catch (e) {
-                session.send(`Error creating channel ${channel.displayName}: ${e.message}`);
-            }
-        });
-        await Promise.all(channelsAddPromises);
-
-        // Add team members
-        let membersToAdd = [ "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3", "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c", "f431b248-8e59-4afa-a307-054a1f220f24" ];
-        let memberAddPromises = membersToAdd.map(async memberId => {
-            try {
-                await this.teamsApi.addMemberToGroupAsync(team.id, memberId);
-            } catch (e) {
-                session.send(`Error adding member ${memberId}: ${e.message}`);
-            }
-        });
-        await Promise.all(memberAddPromises);
-
-        session.send(`Done setting up team, group id is ${team.id}`);
     }
 
     private createDisplayNameForTrip(trip: trips.Trip): string {
@@ -368,16 +332,16 @@ export class RootDialog extends builder.IntentDialog
         return `EK${flightNumbers} ${route} ${dxbDepartureDate}`;
     }
 
-    private async createTeamForTripAsync(session: builder.Session, trip: trips.Trip): Promise<string> {
+    // Create a team for a trip, returning the group id of the newly-created team
+    private async createTeamForTripAsync(trip: trips.Trip): Promise<string> {
         // Create the team
         let team: teams.Team;
         try {
             let displayName = this.createDisplayNameForTrip(trip);
             team = await this.teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
-            session.userData.teamId = team.id;
-            session.send(`Created a new team, group id is ${team.id}`);
+            console.log(`Created a new team, group id is ${team.id}`);
         } catch (e) {
-            session.send(`Error creating team: ${e.message}`);
+            console.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             throw e;
         }
 
@@ -386,44 +350,12 @@ export class RootDialog extends builder.IntentDialog
             try {
                 await this.teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
             } catch (e) {
-                session.send(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`);
+                console.error(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`, e);
             }
         });
         await Promise.all(memberAddPromises);
 
-        session.send(`Done setting up team, group id is ${team.id}`);
         return team.id;
-    }
-
-    private async handleArchiveTeam(session: builder.Session): Promise<void> {
-        try {
-            let teamId = session.userData.teamId;
-
-            // Remove all team members
-            let teamMembers = await this.teamsApi.getMembersOfGroupAsync(teamId);
-            console.log(`Found ${teamMembers.length} members in the team`);
-
-            let memberRemovePromises = teamMembers.map(async member => {
-                try {
-                    await this.teamsApi.removeMemberFromGroupAsync(teamId, member.id);
-                } catch (e) {
-                    session.send(`Error removing member ${member.id}: ${e.message}`);
-                }
-            });
-            await Promise.all(memberRemovePromises);
-
-            // Rename group
-            let group = await this.teamsApi.getGroupAsync(teamId);
-            if (!group.displayName.startsWith("[ARCHIVED]")) {
-                await this.teamsApi.updateGroupAsync(teamId, {
-                    displayName: "[ARCHIVED] " + group.displayName,
-                });
-            }
-
-            session.send(`Archived the team with group id ${teamId}`);
-        } catch (e) {
-            session.send(`Error archiving team: ${e.message}`);
-        }
     }
 
     private async archiveTeamAsync(groupId: string): Promise<void> {
@@ -446,17 +378,6 @@ export class RootDialog extends builder.IntentDialog
             await this.teamsApi.updateGroupAsync(groupId, {
                 displayName: "[ARCHIVED] " + group.displayName,
             });
-        }
-    }
-
-    private async handleDeleteTeam(session: builder.Session): Promise<void> {
-        try {
-            let teamId = session.userData.teamId;
-            await this.teamsApi.deleteGroupAsync(teamId);
-            delete session.userData.teamId;
-            session.send(`Deleted the team with group id ${teamId}`);
-        } catch (e) {
-            session.send(`Error deleting team: ${e.message}`);
         }
     }
 

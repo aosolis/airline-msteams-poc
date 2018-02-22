@@ -65,7 +65,7 @@ export class MongoDbTripsApi implements trips.ITripsApi, trips.ITripsTest {
         });
     }
 
-    public async addTripAsync(trip: trips.Trip): Promise<void> {
+    public async addOrUpdateTripAsync(trip: trips.Trip): Promise<void> {
         await this.initialize();
 
         let filter = { tripId: trip.tripId };
