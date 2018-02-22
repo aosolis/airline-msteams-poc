@@ -42,6 +42,7 @@ const addRemoveCrewRegExp = /^(add|remove)Crew (.*) (.*)$/i;
 const daysInAdvanceToCreateTrips = 7;       // Create teams for trips departing X days in the future
 const daysInPastToMonitorTrips = 7;         // Actively monitor future trips and trips that departed in the past Y days
 const daysInPastToArchiveTrips = 14;        // Archive teams for trips that departed more that Z days ago
+const archivedTag = "[ARCHIVED] ";          // Tag prepended to team name when it is archived 
 
 const tripTemplates: trips.Trip[] = [
     {
@@ -218,10 +219,10 @@ export class RootDialog extends builder.IntentDialog
         this.matches(/deleteTrips/i, (session) => { this.handleDeleteTrips(session); });
         this.matches(addRemoveCrewRegExp, (session) => { this.handleAddRemoveCrew(session); });
 
-        // Commands to simulate a time trigger
-        this.matches(triggerTimeRegExp, (session) => { this.handleTimeTrigger(session); });
+        // Commands to simulate an update trigger at a given time
+        this.matches(triggerTimeRegExp, (session) => { this.handleUpdateTrigger(session); });
 
-        this.onDefault((session) => { this.onMessageReceived(session); });
+        this.onDefault((session) => { session.send("I didn't understand that."); });
     }
 
     // Handle resumption of dialog
@@ -233,6 +234,7 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
+    // Populate the trip database with fake sample trips
     private async handleCreateTrips(session: builder.Session): Promise<void> {
         let dateString = createTripsRegExp.exec(session.message.text)[1];
         let inputDate = moment.utc(dateString);
@@ -309,7 +311,8 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
-    private async handleTimeTrigger(session: builder.Session): Promise<void> {
+    // Handle a trigger to update the teams for upcoming trips
+    private async handleUpdateTrigger(session: builder.Session): Promise<void> {
         let dateString = triggerTimeRegExp.exec(session.message.text)[1];
         let inputDate = moment.utc(dateString);
 
@@ -373,6 +376,7 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
+    // Helper to create a legible display name for a trip
     private createDisplayNameForTrip(trip: trips.Trip): string {
         let flightNumbers = _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
@@ -406,6 +410,7 @@ export class RootDialog extends builder.IntentDialog
         return team.id;
     }
 
+    // Archive a team
     private async archiveTeamAsync(groupId: string): Promise<void> {
         // Remove all team members
         let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
@@ -420,17 +425,12 @@ export class RootDialog extends builder.IntentDialog
         });
         await Promise.all(memberRemovePromises);
 
-        // Rename group
+        // Rename group to indicate that it has been archived
         let group = await this.teamsApi.getGroupAsync(groupId);
-        if (!group.displayName.startsWith("[ARCHIVED]")) {
+        if (!group.displayName.startsWith(archivedTag)) {
             await this.teamsApi.updateGroupAsync(groupId, {
-                displayName: "[ARCHIVED] " + group.displayName,
+                displayName: `${archivedTag} ${group.displayName}`,
             });
         }
-    }
-
-    // Handle message
-    private async onMessageReceived(session: builder.Session): Promise<void> {
-        session.send("I didn't understand that.");
     }
 }
