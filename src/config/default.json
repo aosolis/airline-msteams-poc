@@ -1,7 +1,9 @@
 {
     "app": {
         "baseUri": "https://example.com",
-        "instrumentationKey": ""
+        "instrumentationKey": "",
+        "tenantId": "a5bbb9df-06cc-47f4-8f24-981a2024b94c",
+        "teamOwnerId": "afb71dc2-929d-40bc-9505-e61fb06356fb"
     },
     "bot": {
         "appId": "<app_id>",

@@ -27,7 +27,7 @@ import * as request from "request-promise";
 // Teams Graph API
 // =========================================================
 
-const graphBaseUrl = "https://graph.microsoft.com/testTeamsTestEnv";
+const graphBaseUrl = "https://graph.microsoft.com/testTeamsDevEnv";
 
 export interface DirectoryObject {
     id: string;
@@ -92,13 +92,8 @@ export interface TeamGuestSettings {
 // Wrapper around the Teams Graph APIs
 export class TeamsApi {
 
-    private accessToken: string;
-    private expirationTime: number;
-
     constructor(
-        private tenantId: string,
-        private appId: string,
-        private appPassword: string,
+        private accessToken: string,
     )
     {
     }
@@ -106,8 +101,6 @@ export class TeamsApi {
     // Create a new team
     public async createTeamAsync(displayName: string, description: string, mailNickname: string, teamSettings: Team): Promise<Team>
     {
-        await this.refreshAccessTokenAsync();
-
         let newGroup = await this.createGroupAsync(displayName, description, mailNickname);
         let newTeam: Team;
 
@@ -124,7 +117,7 @@ export class TeamsApi {
                 // Check if error is 404; if so, retry
                 if (true) {
                     await new Promise((resolve, reject) => {
-                        setTimeout(() => { resolve(); }, 10000);
+                        setTimeout(() => { resolve(); }, 1000);
                     });
                 }
             }
@@ -135,8 +128,6 @@ export class TeamsApi {
 
     // Delete a team (group)
     public async deleteGroupAsync(groupId: string): Promise<void> {
-        await this.refreshAccessTokenAsync();
-
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}`,
             json: true,
@@ -148,30 +139,11 @@ export class TeamsApi {
     }
 
     // Add a member to a team (group)
-    public async addOwnerToGroupAsync(groupId: string, userObjectId: string): Promise<void> {
-        await this.refreshAccessTokenAsync();
-
-        let requestBody = {
-            "@odata.id": `https://graph.microsoft.com/beta/directoryObjects/${userObjectId}`,
-        };
-        let options = {
-            url: `${graphBaseUrl}/groups/${groupId}/owners/$ref`,
-            body: requestBody,
-            json: true,
-            headers: {
-                "Authorization": `Bearer ${this.accessToken}`,
-            },
-        };
-        await request.post(options);
-    }
-
-    // Add a member to a team (group)
     public async addMemberToGroupAsync(groupId: string, userObjectId: string): Promise<void> {
-        await this.refreshAccessTokenAsync();
-
         let requestBody = {
             "@odata.id": `https://graph.microsoft.com/beta/directoryObjects/${userObjectId}`,
         };
+
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/members/$ref`,
             body: requestBody,
@@ -185,8 +157,6 @@ export class TeamsApi {
 
     // Remove a member from a team (group)
     public async removeMemberFromGroupAsync(groupId: string, userObjectId: string): Promise<void> {
-        await this.refreshAccessTokenAsync();
-
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/members/${userObjectId}/$ref`,
             json: true,
@@ -199,8 +169,6 @@ export class TeamsApi {
 
     // Get the members of a team (group)
     public async getMembersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
-        await this.refreshAccessTokenAsync();
-
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/members`,
             json: true,
@@ -214,8 +182,6 @@ export class TeamsApi {
 
     // Get group information
     public async getGroupAsync(groupId: string): Promise<Group> {
-        await this.refreshAccessTokenAsync();
-
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}`,
             json: true,
@@ -228,8 +194,6 @@ export class TeamsApi {
 
     // Update group information
     public async updateGroupAsync(groupId: string, groupUpdates: Group): Promise<void> {
-        await this.refreshAccessTokenAsync();
-
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}`,
             body: groupUpdates,
@@ -243,8 +207,6 @@ export class TeamsApi {
 
     // Create a new channel
     public async createChannelAsync(groupId: string, displayName: string, description?: string): Promise<Channel> {
-        await this.refreshAccessTokenAsync();
-
         let requestBody: Channel = {
             displayName: displayName,
         };
@@ -299,25 +261,5 @@ export class TeamsApi {
             },
         };
         return await request.put(options);
-    }
-
-    // Get an access token
-    private async refreshAccessTokenAsync(): Promise<void> {
-        // if (this.accessToken && (Date.now() < this.expirationTime)) {
-        //     return;
-        // }
-
-        // let accessTokenUrl = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
-        // let params = {
-        //     grant_type: "client_credentials",
-        //     client_id: this.appId,
-        //     client_secret: this.appPassword,
-        //     scope: "https://graph.microsoft.com/.default",
-        // };
-
-        // let response = await request.post({ url: accessTokenUrl, form: params, json: true });
-        // this.accessToken = response.access_token;
-        // this.expirationTime = Date.now() + (response.expires_in * 1000) - (60 * 100);
-        this.accessToken = "eyJ0eXAiOiJKV1QiLCJub25jZSI6IkFRQUJBQUFBQUFCSGg0a21TX2FLVDVYcmp6eFJBdEh6RmdQbDJDMTdIRV9YckpMQUo3RmdablpGOFkxR0o4eDBwaEpVU2Z1M1JWRXowWmJ5a2MxdUdXeVc5WGdYRGdVLVVJVFUzUE56SFA4YkFxcW1yd0MtSVNBQSIsImFsZyI6IlJTMjU2IiwieDV0IjoiU1NRZGhJMWNLdmhRRURTSnhFMmdHWXM0MFEwIiwia2lkIjoiU1NRZGhJMWNLdmhRRURTSnhFMmdHWXM0MFEwIn0.eyJhdWQiOiJodHRwczovL2dyYXBoLm1pY3Jvc29mdC5jb20iLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC9hNWJiYjlkZi0wNmNjLTQ3ZjQtOGYyNC05ODFhMjAyNGI5NGMvIiwiaWF0IjoxNTE5MzI4NDk2LCJuYmYiOjE1MTkzMjg0OTYsImV4cCI6MTUxOTMzMjM5NiwiYWNyIjoiMSIsImFpbyI6IlkyTmdZRmlTS01uVnkzeCtjL1Y2WXpIVHJaTTNUMU5WVTI5eis3SFAyOTA2b3JPL1B4VUEiLCJhbXIiOlsicHdkIl0sImFwcF9kaXNwbGF5bmFtZSI6IkVtaXJhdGVzIiwiYXBwaWQiOiIxOWI5MjEzZS0yODM1LTRjNWMtYmRhZS03NzkzYjRmNDE3NzQiLCJhcHBpZGFjciI6IjEiLCJmYW1pbHlfbmFtZSI6IkFkbWluaXN0cmF0b3IiLCJnaXZlbl9uYW1lIjoiTU9EIiwiaXBhZGRyIjoiMTMxLjEwNy4xNTkuNzUiLCJuYW1lIjoiTU9EIEFkbWluaXN0cmF0b3IiLCJvaWQiOiIyN2Y5YzQ4Zi00YjM0LTQxYmMtYWRmYy1kMDY4OTZjNmY1ZWMiLCJwbGF0ZiI6IjMiLCJwdWlkIjoiMTAwM0JGRkRBNzk2MUY3RCIsInNjcCI6Ikdyb3VwLlJlYWQuQWxsIEdyb3VwLlJlYWRXcml0ZS5BbGwgb2ZmbGluZV9hY2Nlc3MgVXNlci5SZWFkIFVzZXIuUmVhZC5BbGwgVXNlci5SZWFkQmFzaWMuQWxsIFVzZXIuUmVhZFdyaXRlIiwic2lnbmluX3N0YXRlIjpbImttc2kiXSwic3ViIjoid1FSUHNWVjVJRUljVjA5MDRoWjB4eVMyYzlZVEl6X2kxcHM1eEcwVWVEVSIsInRpZCI6ImE1YmJiOWRmLTA2Y2MtNDdmNC04ZjI0LTk4MWEyMDI0Yjk0YyIsInVuaXF1ZV9uYW1lIjoiYWRtaW5ATTM2NXgxNDYxODgub25taWNyb3NvZnQuY29tIiwidXBuIjoiYWRtaW5ATTM2NXgxNDYxODgub25taWNyb3NvZnQuY29tIiwidXRpIjoiX1g5WWczUFAxRVdYV2FmY3hKQUhBQSIsInZlciI6IjEuMCIsIndpZHMiOlsiNjJlOTAzOTQtNjlmNS00MjM3LTkxOTAtMDEyMTc3MTQ1ZTEwIl19.bY7LLs6li9cuV2gpOsNKWb1b2A1GdGP643fL4Kp3KY70tsgFLeXYRwhklMrl1KctinAsKuPV47Q0KHLlF-77txsx1lI7MgnDJQp6nTo9JWAfYb90GLOY_wPvIPtX6YF_edYYygmSrN1YQKaUfTz0vy953Ur8dXtJQkS_tz1uAJ0uLZ-yn3jTLgobTQqd9tZvpGDN6akZ4JSgzniPEXEJiwt8T2ySBXgCpb0Uph5y6GpUdNnzQes89muQVAxGw9yw8UKOa5wlfdLgHvXxe_A8IHqLdmeWVldeAF7gmXG7vX7uGQ2zI9wHzdF0kKENSDqJJHUfL-Z0DotMBZXTn-ftaA";
     }
 }

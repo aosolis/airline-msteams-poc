@@ -21,6 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+import * as _ from "lodash";
 import * as config from "config";
 import * as builder from "botbuilder";
 import * as moment from "moment";
@@ -29,7 +30,8 @@ import { AzureADv1Dialog } from "./AzureADv1Dialog";
 import * as trips from "../trips/TripsApi";
 import * as mongodbTrips from "../trips/MongoDbTripsApi";
 import * as teams from "../TeamsApi";
-import * as utils from "../utils";
+import { GroupData, IGroupDataStorage } from "../storage/GroupDataStorage";
+import { MongoDbGroupDataStorage } from "../storage/MongoDbGroupDataStorage";
 let uuidv4 = require("uuid/v4");
 
 const createTripsRegExp = /^createTrips(.*)$/i;
@@ -55,62 +57,62 @@ const tripTemplates: trips.Trip[] = [
             {
                 staffId: "292062",
                 rosterGrade: "FG1",
-                aadObjectId: "",
+                aadObjectId: "303b75b6-87e1-4f8e-8387-fbfe288356bf",
             },
             {
                 staffId: "378718",
                 rosterGrade: "FG1",
-                aadObjectId: "",
+                aadObjectId: "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c",
             },
             {
                 staffId: "431620",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "e5a7e50b-8005-4594-93aa-51f62912d1cd",
             },
             {
                 staffId: "420501",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "2238636f-e037-47be-8cda-ca765ff96793",
             },
             {
                 staffId: "431400",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "ecd0aca2-74ca-41fb-bbef-fd566b0e3aa2",
             },
             {
                 staffId: "450986",
                 rosterGrade: "GR2",
-                aadObjectId: "",
+                aadObjectId: "4252dcaa-7a49-43e1-95e8-3db616da342d",
             },
             {
                 staffId: "430109",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "0011a194-4d0e-4372-9016-40b11837f429",
             },
             {
                 staffId: "381830",
                 rosterGrade: "SFS",
-                aadObjectId: "",
+                aadObjectId: "bf966547-37f8-43bc-b5b5-48cd7052ef75",
             },
             {
                 staffId: "434722",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "2fdac1c4-69dd-418d-bf3c-9aafc42d950b",
             },
             {
                 staffId: "422970",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "a2d06783-f918-4f4b-af32-5dacb94f1db4",
             },
             {
                 staffId: "448210",
                 rosterGrade: "GR2",
-                aadObjectId: "",
+                aadObjectId: "07b8e33c-f86f-440c-ac1f-6725920dbe79",
             },
             {
                 staffId: "380824",
                 rosterGrade: "PUR",
-                aadObjectId: "",
+                aadObjectId: "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3",
             },
         ],
     },
@@ -143,36 +145,52 @@ const tripTemplates: trips.Trip[] = [
             {
                 staffId: "382244",
                 rosterGrade: "PUR",
-                aadObjectId: "",
+                aadObjectId: "d971021e-cc4d-4c7d-8076-aeaaad494fa7",
             },
             {
                 staffId: "420873",
                 rosterGrade: "GR1",
-                aadObjectId: "",
+                aadObjectId: "1e45791d-0d96-404c-ac7d-9bf977362b1b",
             },
             {
                 staffId: "429465",
                 rosterGrade: "GR2",
-                aadObjectId: "",
+                aadObjectId: "0a971a4f-b0bf-4ce4-8b39-944166165aeb",
             },
             {
                 staffId: "442614",
                 rosterGrade: "GR2",
-                aadObjectId: "",
+                aadObjectId: "aeac155e-8202-472b-8a47-d5cf079e35f1",
             },
             {
                 staffId: "441994",
                 rosterGrade: "GR2",
-                aadObjectId: "",
+                aadObjectId: "60e66497-bf32-4471-bcb2-253ac2fa20fc",
             },
         ],
     },
 ];
 
+const teamSettings: teams.Team = {
+    memberSettings: {
+        allowAddRemoveApps: false,
+        allowCreateUpdateChannels: false,
+        allowCreateUpdateRemoveConnectors: false,
+        allowCreateUpdateRemoveTabs: false,
+        allowDeleteChannels: false,
+    },
+    guestSettings: {
+        allowCreateUpdateChannels: false,
+        allowDeleteChannels: false,
+    },
+};
+
 // Root dialog provides choices in identity providers
 export class RootDialog extends builder.IntentDialog
 {
     private tripsApi: trips.ITripsApi = new mongodbTrips.MongoDbTripsApi("Trips", config.get("mongoDb.connectionString"));
+    private teamsApi: teams.TeamsApi = new teams.TeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
+    private groupDataStorage: IGroupDataStorage = new MongoDbGroupDataStorage("Teams", config.get("mongoDb.connectionString"));
 
     constructor() {
         super();
@@ -249,10 +267,44 @@ export class RootDialog extends builder.IntentDialog
         session.send(`Simulating a time trigger for ${triggerTime.toUTCString()}`);
 
         try {
-            // Find trips that are departing in the next week
+            // Find trips to create
             let trips = await this.tripsApi.findTripsDepartingInRangeAsync(triggerTime, moment(triggerTime).add(7, "d").toDate());
             let departureTimes = trips.map(trip => trip.dxbDepartureTime.toUTCString()).join(", ");
             session.send(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
+
+            let teamCreatePromises = trips.map(async (trip) => {
+                let groupData = await this.groupDataStorage.getGroupDataByTripAsync(trip.tripId);
+                if (!groupData) {
+                    let groupId = await this.createTeamForTripAsync(session, trip);
+                    let newGroupData: GroupData = {
+                        groupId:  groupId,
+                        tripId: trip.tripId,
+                        tripSnapshot: trip,
+                        creationTime: triggerTime,
+                    };
+                    await this.groupDataStorage.addOrUpdateGroupDataAsync(newGroupData);
+                    session.send(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.dxbDepartureTime.toUTCString()}`);
+                }
+            });
+            await Promise.all(teamCreatePromises);
+
+            // Find teams to archive
+            let groupsToArchive = await this.groupDataStorage.findActiveGroupsCreatedBeforeTimeAsync(moment(triggerTime).subtract(14, "d").toDate());
+            let groupIds = groupsToArchive.map(groupData => groupData.groupId).join(", ");
+            session.send(`Found ${groupsToArchive.length} groups to archive: ${groupIds}`);
+
+            let teamArchivePromises = groupsToArchive.map(async (groupData) => {
+                try
+                {
+                    await this.archiveTeamAsync(groupData.groupId);
+                    groupData.archivalTime = triggerTime;
+                    await this.groupDataStorage.addOrUpdateGroupDataAsync(groupData);
+                }
+                catch (e) {
+                    session.send(`Error archiving group ${groupData.groupId}: ${e.message}`);
+                }
+            });
+            await Promise.all(teamArchivePromises);
         } catch (e) {
             console.log(e);
             session.send(`An error occurred while processing time trigger at ${triggerTime.toUTCString()}: ${e.message}`);
@@ -261,30 +313,14 @@ export class RootDialog extends builder.IntentDialog
 
     private async handleTriggerSetup(session: builder.Session): Promise<void> {
         let flight = await this.tripsApi.getTripAsync(null);
-        await this.createTeamForTrip(session, flight);
+        await this.createTeamForTripAsync(session, flight);
     }
 
     private async handleCreateTeam(session: builder.Session): Promise<void> {
-        let userInfo = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
-        let teamsApi = new teams.TeamsApi(userInfo.accessToken);
-
         // Create the team
         let team: teams.Team;
         try {
-            let teamSettings: teams.Team = {
-                memberSettings: {
-                    allowAddRemoveApps: false,
-                    allowCreateUpdateChannels: false,
-                    allowCreateUpdateRemoveConnectors: false,
-                    allowCreateUpdateRemoveTabs: false,
-                    allowDeleteChannels: false,
-                },
-                guestSettings: {
-                    allowCreateUpdateChannels: false,
-                    allowDeleteChannels: false,
-                },
-            };
-            team = await teamsApi.createTeamAsync("Test Team", "Test Team Description", "test100", teamSettings);
+            team = await this.teamsApi.createTeamAsync("Test Team", "Test Team Description", "test100", teamSettings);
             session.userData.teamId = team.id;
             session.send(`Created a new team, group id is ${team.id}`);
         } catch (e) {
@@ -304,7 +340,7 @@ export class RootDialog extends builder.IntentDialog
         ];
         let channelsAddPromises = channelsToAdd.map(async channel => {
             try {
-                await teamsApi.createChannelAsync(team.id, channel.displayName, channel.description);
+                await this.teamsApi.createChannelAsync(team.id, channel.displayName, channel.description);
             } catch (e) {
                 session.send(`Error creating channel ${channel.displayName}: ${e.message}`);
             }
@@ -315,7 +351,7 @@ export class RootDialog extends builder.IntentDialog
         let membersToAdd = [ "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3", "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c", "f431b248-8e59-4afa-a307-054a1f220f24" ];
         let memberAddPromises = membersToAdd.map(async memberId => {
             try {
-                await teamsApi.addMemberToGroupAsync(team.id, memberId);
+                await this.teamsApi.addMemberToGroupAsync(team.id, memberId);
             } catch (e) {
                 session.send(`Error adding member ${memberId}: ${e.message}`);
             }
@@ -325,58 +361,30 @@ export class RootDialog extends builder.IntentDialog
         session.send(`Done setting up team, group id is ${team.id}`);
     }
 
-    private async createTeamForTrip(session: builder.Session, trip: trips.Trip): Promise<void> {
-        let userInfo = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
-        let teamsApi = new teams.TeamsApi(userInfo.accessToken);
+    private createDisplayNameForTrip(trip: trips.Trip): string {
+        let flightNumbers = _.uniq(trip.flights.map(flight => flight.flightNumber)).join("/");
+        let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
+        let dxbDepartureDate = moment(trip.dxbDepartureTime).utcOffset(240).format("YYYY-MM-DD");
+        return `EK${flightNumbers} ${route} ${dxbDepartureDate}`;
+    }
 
+    private async createTeamForTripAsync(session: builder.Session, trip: trips.Trip): Promise<string> {
         // Create the team
         let team: teams.Team;
         try {
-            let displayName = "test";
-            let teamSettings: teams.Team = {
-                memberSettings: {
-                    allowAddRemoveApps: false,
-                    allowCreateUpdateChannels: false,
-                    allowCreateUpdateRemoveConnectors: false,
-                    allowCreateUpdateRemoveTabs: false,
-                    allowDeleteChannels: false,
-                },
-                guestSettings: {
-                    allowCreateUpdateChannels: false,
-                    allowDeleteChannels: false,
-                },
-            };
-            team = await teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
+            let displayName = this.createDisplayNameForTrip(trip);
+            team = await this.teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
             session.userData.teamId = team.id;
             session.send(`Created a new team, group id is ${team.id}`);
         } catch (e) {
             session.send(`Error creating team: ${e.message}`);
-            return;
+            throw e;
         }
-
-        // Set up channels
-        let channelsToAdd: teams.Channel[] = [
-            {
-                displayName: "Trip",
-                description: "Aircraft and flight path",
-            },
-            {
-                displayName: "Crew",
-            },
-        ];
-        let channelsAddPromises = channelsToAdd.map(async channel => {
-            try {
-                await teamsApi.createChannelAsync(team.id, channel.displayName, channel.description);
-            } catch (e) {
-                session.send(`Error creating channel ${channel.displayName}: ${e.message}`);
-            }
-        });
-        await Promise.all(channelsAddPromises);
 
         // Add team members
         let memberAddPromises = trip.crewMembers.map(async crewMember => {
             try {
-                await teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
+                await this.teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
             } catch (e) {
                 session.send(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`);
             }
@@ -384,22 +392,20 @@ export class RootDialog extends builder.IntentDialog
         await Promise.all(memberAddPromises);
 
         session.send(`Done setting up team, group id is ${team.id}`);
+        return team.id;
     }
 
     private async handleArchiveTeam(session: builder.Session): Promise<void> {
-        let userInfo = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
-        let teamsApi = new teams.TeamsApi(userInfo.accessToken);
-
         try {
             let teamId = session.userData.teamId;
 
             // Remove all team members
-            let teamMembers = await teamsApi.getMembersOfGroupAsync(teamId);
+            let teamMembers = await this.teamsApi.getMembersOfGroupAsync(teamId);
             console.log(`Found ${teamMembers.length} members in the team`);
 
             let memberRemovePromises = teamMembers.map(async member => {
                 try {
-                    await teamsApi.removeMemberFromGroupAsync(teamId, member.id);
+                    await this.teamsApi.removeMemberFromGroupAsync(teamId, member.id);
                 } catch (e) {
                     session.send(`Error removing member ${member.id}: ${e.message}`);
                 }
@@ -407,9 +413,9 @@ export class RootDialog extends builder.IntentDialog
             await Promise.all(memberRemovePromises);
 
             // Rename group
-            let group = await teamsApi.getGroupAsync(teamId);
+            let group = await this.teamsApi.getGroupAsync(teamId);
             if (!group.displayName.startsWith("[ARCHIVED]")) {
-                await teamsApi.updateGroupAsync(teamId, {
+                await this.teamsApi.updateGroupAsync(teamId, {
                     displayName: "[ARCHIVED] " + group.displayName,
                 });
             }
@@ -420,13 +426,33 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
-    private async handleDeleteTeam(session: builder.Session): Promise<void> {
-        let userInfo = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
-        let teamsApi = new teams.TeamsApi(userInfo.accessToken);
+    private async archiveTeamAsync(groupId: string): Promise<void> {
+        // Remove all team members
+        let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
+        console.log(`Found ${teamMembers.length} members in the team`);
 
+        let memberRemovePromises = teamMembers.map(async member => {
+            try {
+                await this.teamsApi.removeMemberFromGroupAsync(groupId, member.id);
+            } catch (e) {
+                console.error(`Error removing member ${member.id}: ${e.message}`);
+            }
+        });
+        await Promise.all(memberRemovePromises);
+
+        // Rename group
+        let group = await this.teamsApi.getGroupAsync(groupId);
+        if (!group.displayName.startsWith("[ARCHIVED]")) {
+            await this.teamsApi.updateGroupAsync(groupId, {
+                displayName: "[ARCHIVED] " + group.displayName,
+            });
+        }
+    }
+
+    private async handleDeleteTeam(session: builder.Session): Promise<void> {
         try {
             let teamId = session.userData.teamId;
-            await teamsApi.deleteGroupAsync(teamId);
+            await this.teamsApi.deleteGroupAsync(teamId);
             delete session.userData.teamId;
             session.send(`Deleted the team with group id ${teamId}`);
         } catch (e) {
