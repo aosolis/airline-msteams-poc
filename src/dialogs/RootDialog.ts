@@ -26,12 +26,13 @@ import * as config from "config";
 import * as builder from "botbuilder";
 import * as moment from "moment";
 import * as constants from "../constants";
-import { AzureADv1Dialog } from "./AzureADv1Dialog";
+import * as utils from "../utils";
 import * as teams from "../TeamsApi";
 import * as trips from "../trips/TripsApi";
 import { MongoDbTripsApi } from "../trips/MongoDbTripsApi";
 import { GroupData, IAppDataStore } from "../storage/AppDataStore";
 import { MongoDbAppDataStore } from "../storage/MongoDbAppDataStore";
+import { AzureADv1Dialog } from "./AzureADv1Dialog";
 let uuidv4 = require("uuid/v4");
 
 const createTripsRegExp = /^createTrips(.*)$/i;
@@ -192,9 +193,9 @@ const teamSettings: teams.Team = {
 // Root dialog provides choices in identity providers
 export class RootDialog extends builder.IntentDialog
 {
+    private teamsApi: teams.TeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
     private tripsApi: trips.ITripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
-    private teamsApi: teams.TeamsApi = new teams.TeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
-    private groupDataStorage: IAppDataStore = new MongoDbAppDataStore(config.get("mongoDb.connectionString"));
+    private appDataStore: IAppDataStore = new MongoDbAppDataStore(config.get("mongoDb.connectionString"));
 
     constructor() {
         super();
@@ -218,6 +219,15 @@ export class RootDialog extends builder.IntentDialog
         this.matches(triggerTimeRegExp, (session) => { this.handleTimeTrigger(session); });
 
         this.onDefault((session) => { this.onMessageReceived(session); });
+    }
+
+    // Handle resumption of dialog
+    public dialogResumed<T>(session: builder.Session, result: builder.IDialogResult<T>): void {
+        // The only dialog we branch to is auth
+        let userToken = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
+        if (userToken) {
+            this.teamsApi = new teams.UserContextTeamsApi(userToken.accessToken, userToken.expirationTime);
+        }
     }
 
     private async handleCreateTrips(session: builder.Session): Promise<void> {
@@ -272,7 +282,7 @@ export class RootDialog extends builder.IntentDialog
         try {
             // Archive old teams
             let maxDepartureTimeToArchive = moment(triggerTime).subtract(daysInPastToArchiveTrips, "d").toDate();
-            let groupsToArchive = (await this.groupDataStorage.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
+            let groupsToArchive = (await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
                 .filter(groupData => groupData.tripSnapshot.departureTime < maxDepartureTimeToArchive);
 
             let groupIds = groupsToArchive.map(groupData => groupData.groupId).join(", ");
@@ -284,7 +294,7 @@ export class RootDialog extends builder.IntentDialog
                     await this.archiveTeamAsync(groupData.groupId);
 
                     groupData.archivalTime = triggerTime;
-                    await this.groupDataStorage.addOrUpdateGroupDataAsync(groupData);
+                    await this.appDataStore.addOrUpdateGroupDataAsync(groupData);
                 }
                 catch (e) {
                     console.error(`Error archiving group ${groupData.groupId}: ${e.message}`, e);
@@ -300,7 +310,7 @@ export class RootDialog extends builder.IntentDialog
             console.log(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
 
             let teamCreatePromises = trips.map(async (trip) => {
-                let groupData = await this.groupDataStorage.getGroupDataByTripAsync(trip.tripId);
+                let groupData = await this.appDataStore.getGroupDataByTripAsync(trip.tripId);
                 if (!groupData) {
                     let groupId = await this.createTeamForTripAsync(trip);
 
@@ -310,7 +320,7 @@ export class RootDialog extends builder.IntentDialog
                         tripSnapshot: trip,
                         creationTime: triggerTime,
                     };
-                    await this.groupDataStorage.addOrUpdateGroupDataAsync(newGroupData);
+                    await this.appDataStore.addOrUpdateGroupDataAsync(newGroupData);
 
                     console.log(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.departureTime.toUTCString()}`);
                 }
