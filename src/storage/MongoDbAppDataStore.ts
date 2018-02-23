@@ -93,6 +93,20 @@ export class MongoDbAppDataStore implements IAppDataStore {
         });
     }
 
+    public async getAllGroupsAsync(): Promise<GroupData[]> {
+        await this.initialize();
+
+        return await new Promise<GroupData[]>((resolve, reject) => {
+            this.teamsCollection.find({}).toArray((error, documents) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(documents || []);
+                }
+            });
+        });
+    }
+
     public async getAppDataAsync(key: string): Promise<any> {
         await this.initialize();
 

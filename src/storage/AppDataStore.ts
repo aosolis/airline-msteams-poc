@@ -52,6 +52,9 @@ export interface IAppDataStore {
     // Find active (not archived) teans that were created before the given time
     findActiveGroupsCreatedBeforeTimeAsync(endTime: Date): Promise<GroupData[]>;
 
+    // Find teans that were created by this app
+    getAllGroupsAsync(): Promise<GroupData[]>;
+
     // Get app metadata
     getAppDataAsync(key: string): Promise<any>;
 

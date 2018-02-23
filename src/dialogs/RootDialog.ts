@@ -22,6 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import * as _ from "lodash";
+import * as winston from "winston";
 import * as config from "config";
 import * as builder from "botbuilder";
 import * as moment from "moment";
@@ -81,10 +82,10 @@ export class RootDialog extends builder.IntentDialog
         this.matches(/login/i, constants.DialogId.AzureADv1, "login");
         this.matches(/logout/i, constants.DialogId.AzureADv1, "logout");
 
-        // Commands to manipulate trip database
+        // Commands to manipulate trip database and app state
         this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
-        this.matches(/deleteTrips/i, (session) => { this.handleDeleteTrips(session); });
         this.matches(addRemoveCrewRegExp, (session) => { this.handleAddRemoveCrew(session); });
+        this.matches(/resetState/i, (session) => { this.handleResetState(session); });
 
         // Commands to simulate an update trigger at a given time
         this.matches(triggerTimeRegExp, (session) => { this.handleUpdateTrigger(session); });
@@ -127,20 +128,38 @@ export class RootDialog extends builder.IntentDialog
             let tripInfo = fakeTrips.map(trip => `${this.createDisplayNameForTrip(trip)} (${trip.tripId})`).join(", ");
             session.send(`Created ${fakeTrips.length} trips: ${tripInfo}`);
         } catch (e) {
-            console.error(`Error creating trips: ${e.message}`, e);
+            winston.error(`Error creating trips: ${e.message}`, e);
             session.send(`An error occurred while creating trips: ${e.message}`);
         }
     }
 
-    // Delete all trips in the trip database
-    private async handleDeleteTrips(session: builder.Session): Promise<void> {
+    // Delete all trips in the trip database, and all teams that were created
+    private async handleResetState(session: builder.Session): Promise<void> {
+        // Delete all trips
         try {
             await (<trips.ITripsTest><any>this.tripsApi).deleteAllTripsAsync();
-            session.send(`Deleted all trips from the trip database.`);
         } catch (e) {
-            console.error(`Error deleting trips: ${e.message}`, e);
+            winston.error(`Error deleting trips: ${e.message}`, e);
             session.send(`An error occurred while deleting trips: ${e.message}`);
         }
+
+        // Delete all teams
+        try {
+            let teams = await this.appDataStore.getAllGroupsAsync();
+            let deleteTeamPromises = teams.map(async (groupData) => {
+                let groupId = groupData.groupId;
+                winston.info(`Deleting group ${groupId}`);
+
+                await this.teamsApi.deleteGroupAsync(groupId);
+                await this.appDataStore.deleteGroupDataAsync(groupId);
+            });
+            await Promise.all(deleteTeamPromises);
+        } catch (e) {
+            winston.error(`Error deleting teams: ${e.message}`, e);
+            session.send(`An error occurred while deleting teams: ${e.message}`);
+        }
+
+        session.send("I deleted all trips and teams!");
     }
 
     // Add or remove a crew member from a trip
@@ -152,13 +171,13 @@ export class RootDialog extends builder.IntentDialog
 
         let trip = await this.tripsApi.getTripAsync(tripId);
         if (!trip) {
-            session.send(`The trip with id ${tripId} could not be found`);
+            session.send(`I couldn't find a trip with id ${tripId}.`);
             return;
         }
 
         let crewMember = sampledata.findCrewMemberByUpn(crewMemberEmail);
         if (!crewMember) {
-            session.send(`A crew member with email ${crewMemberEmail} could not be found`);
+            session.send(`I couldn't find a crew member with email address ${crewMemberEmail}.`);
             return;
         }
 
@@ -169,13 +188,13 @@ export class RootDialog extends builder.IntentDialog
             case "add":
                 trip.crewMembers = _(trip.crewMembers).push(crewMember).uniqBy("aadObjectId").value();
                 await testTripsApi.addOrUpdateTripAsync(trip);
-                session.send(`Crew member ${crewMember.displayName} added to trip roster for ${tripName}`);
+                session.send(`I added ${crewMember.displayName} to the trip roster for ${tripName}.`);
                 break;
 
             case "remove":
                 trip.crewMembers = trip.crewMembers.filter(member => member.aadObjectId !== crewMember.aadObjectId);
                 await testTripsApi.addOrUpdateTripAsync(trip);
-                session.send(`Crew member ${crewMember.displayName} removed from trip roster for ${tripName}`);
+                session.send(`I removed ${crewMember.displayName} from the trip roster for ${tripName}.`);
                 break;
         }
     }
@@ -187,7 +206,7 @@ export class RootDialog extends builder.IntentDialog
 
         // By default simulate a time trigger for the current time, allowing override
         let triggerTime = inputDate.isValid() ? inputDate.toDate() : moment.utc().toDate();
-        console.log(`Simulating a time trigger for ${triggerTime.toUTCString()}`);
+        winston.info(`Simulating a time trigger for ${triggerTime.toUTCString()}`);
 
         try {
             // Archive old teams
@@ -196,7 +215,7 @@ export class RootDialog extends builder.IntentDialog
                 .filter(groupData => groupData.tripSnapshot.departureTime < maxDepartureTimeToArchive);
 
             let groupIdsToArchive = groupsToArchive.map(groupData => groupData.groupId).join(", ");
-            console.log(`Found ${groupsToArchive.length} groups to archive: ${groupIdsToArchive}`);
+            winston.info(`Found ${groupsToArchive.length} groups to archive: ${groupIdsToArchive}`);
 
             let teamArchivePromises = groupsToArchive.map(async (groupData) => {
                 try
@@ -207,7 +226,7 @@ export class RootDialog extends builder.IntentDialog
                     await this.appDataStore.addOrUpdateGroupDataAsync(groupData);
                 }
                 catch (e) {
-                    console.error(`Error archiving group ${groupData.groupId}: ${e.message}`, e);
+                    winston.error(`Error archiving group ${groupData.groupId}: ${e.message}`, e);
                 }
             });
             await Promise.all(teamArchivePromises);
@@ -218,7 +237,7 @@ export class RootDialog extends builder.IntentDialog
                 .filter(groupData => groupData.tripSnapshot.departureTime > minDepartureTimeToUpdate);
 
             let groupIdsToUpdate = groupsToUpdate.map(groupData => groupData.groupId).join(", ");
-            console.log(`Found ${groupsToUpdate.length} groups to update: ${groupIdsToUpdate}`);
+            winston.info(`Found ${groupsToUpdate.length} groups to update: ${groupIdsToUpdate}`);
 
             let teamUpdatePromises = groupsToUpdate.map(async (groupData) => {
                 try
@@ -234,20 +253,20 @@ export class RootDialog extends builder.IntentDialog
                         !groupMembers.find(groupMember => groupMember.id === crewMember.aadObjectId));
                     let memberAddPromises = crewMembersToAdd.map((crewMember) => this.teamsApi.addMemberToGroupAsync(groupId, crewMember.aadObjectId));
                     await Promise.all(memberAddPromises);
-                    console.log(`Added ${crewMembersToAdd.length} new members to group ${groupId}`);
+                    winston.info(`Added ${crewMembersToAdd.length} new members to group ${groupId}`);
 
                     // Remove deleted group members
                     let groupMembersToRemove = groupMembers.filter(groupMember =>
                         !crewMembers.find(crewMember => groupMember.id === crewMember.aadObjectId));
                     let memberRemovePromises = groupMembersToRemove.map((groupMember) => this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id));
                     await Promise.all(memberRemovePromises);
-                    console.log(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
+                    winston.info(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
 
                     groupData.tripSnapshot = trip;
                     this.appDataStore.addOrUpdateGroupDataAsync(groupData);
                 }
                 catch (e) {
-                    console.error(`Error updating group ${groupData.groupId}: ${e.message}`, e);
+                    winston.error(`Error updating group ${groupData.groupId}: ${e.message}`, e);
                 }
             });
             await Promise.all(teamUpdatePromises);
@@ -257,7 +276,7 @@ export class RootDialog extends builder.IntentDialog
             let trips = await this.tripsApi.findTripsDepartingInRangeAsync(triggerTime, maxDepartureTimeToCreate);
 
             let departureTimes = trips.map(trip => trip.departureTime.toUTCString()).join(", ");
-            console.log(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
+            winston.info(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
 
             let teamCreatePromises = trips.map(async (trip) => {
                 let groupData = await this.appDataStore.getGroupDataByTripAsync(trip.tripId);
@@ -272,15 +291,15 @@ export class RootDialog extends builder.IntentDialog
                     };
                     await this.appDataStore.addOrUpdateGroupDataAsync(newGroupData);
 
-                    console.log(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.departureTime.toUTCString()}`);
+                    winston.info(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.departureTime.toUTCString()}`);
                 }
             });
             await Promise.all(teamCreatePromises);
 
-            session.send(`Finished processing time trigger for ${triggerTime.toUTCString()}`);
+            session.send(`I finished processing the time trigger for ${triggerTime.toUTCString()}`);
         } catch (e) {
             let errorMessage = `An error occurred while processing time trigger at ${triggerTime.toUTCString()}: ${e.message}`;
-            console.error(errorMessage, e);
+            winston.error(errorMessage, e);
             session.send(errorMessage);
         }
     }
@@ -300,9 +319,9 @@ export class RootDialog extends builder.IntentDialog
         try {
             let displayName = this.createDisplayNameForTrip(trip);
             team = await this.teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
-            console.log(`Created a new team, group id is ${team.id}`);
+            winston.info(`Created a new team, group id is ${team.id}`);
         } catch (e) {
-            console.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
+            winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             throw e;
         }
 
@@ -311,7 +330,7 @@ export class RootDialog extends builder.IntentDialog
             try {
                 await this.teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
             } catch (e) {
-                console.error(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`, e);
+                winston.error(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`, e);
             }
         });
         await Promise.all(memberAddPromises);
@@ -323,13 +342,13 @@ export class RootDialog extends builder.IntentDialog
     private async archiveTeamAsync(groupId: string): Promise<void> {
         // Remove all team members
         let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
-        console.log(`Found ${teamMembers.length} members in the team`);
+        winston.info(`Found ${teamMembers.length} members in the team`);
 
         let memberRemovePromises = teamMembers.map(async member => {
             try {
                 await this.teamsApi.removeMemberFromGroupAsync(groupId, member.id);
             } catch (e) {
-                console.error(`Error removing member ${member.id}: ${e.message}`);
+                winston.error(`Error removing member ${member.id}: ${e.message}`);
             }
         });
         await Promise.all(memberRemovePromises);
