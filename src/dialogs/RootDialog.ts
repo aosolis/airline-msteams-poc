@@ -29,6 +29,7 @@ import * as constants from "../constants";
 import * as utils from "../utils";
 import * as teams from "../TeamsApi";
 import * as trips from "../trips/TripsApi";
+import * as sampledata from "../data/SampleData";
 import { MongoDbTripsApi } from "../trips/MongoDbTripsApi";
 import { GroupData, IAppDataStore } from "../storage/AppDataStore";
 import { MongoDbAppDataStore } from "../storage/MongoDbAppDataStore";
@@ -43,140 +44,6 @@ const daysInAdvanceToCreateTrips = 7;       // Create teams for trips departing 
 const daysInPastToMonitorTrips = 7;         // Actively monitor future trips and trips that departed in the past Y days
 const daysInPastToArchiveTrips = 14;        // Archive teams for trips that departed more that Z days ago
 const archivedTag = "[ARCHIVED] ";          // Tag prepended to team name when it is archived
-
-const tripTemplates: trips.Trip[] = [
-    {
-        tripId: null,
-        departureTime: new Date("2018-02-08 14:25:00 UTC+4"),
-        flights: [
-            {
-                flightNumber: "051",
-                origin: "DXB",
-                destination: "MUC",
-            },
-            {
-                flightNumber: "052",
-                origin: "MUC",
-                destination: "DXB",
-            },
-        ],
-        crewMembers: [
-            {
-                staffId: "292062",
-                rosterGrade: "FG1",
-                aadObjectId: "303b75b6-87e1-4f8e-8387-fbfe288356bf",
-            },
-            {
-                staffId: "378718",
-                rosterGrade: "FG1",
-                aadObjectId: "0f429da5-2cbf-4d95-bc2c-16a1bef3ed1c",
-            },
-            {
-                staffId: "431620",
-                rosterGrade: "GR1",
-                aadObjectId: "e5a7e50b-8005-4594-93aa-51f62912d1cd",
-            },
-            {
-                staffId: "420501",
-                rosterGrade: "GR1",
-                aadObjectId: "2238636f-e037-47be-8cda-ca765ff96793",
-            },
-            {
-                staffId: "431400",
-                rosterGrade: "GR1",
-                aadObjectId: "ecd0aca2-74ca-41fb-bbef-fd566b0e3aa2",
-            },
-            {
-                staffId: "450986",
-                rosterGrade: "GR2",
-                aadObjectId: "4252dcaa-7a49-43e1-95e8-3db616da342d",
-            },
-            {
-                staffId: "430109",
-                rosterGrade: "GR1",
-                aadObjectId: "0011a194-4d0e-4372-9016-40b11837f429",
-            },
-            {
-                staffId: "381830",
-                rosterGrade: "SFS",
-                aadObjectId: "bf966547-37f8-43bc-b5b5-48cd7052ef75",
-            },
-            {
-                staffId: "434722",
-                rosterGrade: "GR1",
-                aadObjectId: "2fdac1c4-69dd-418d-bf3c-9aafc42d950b",
-            },
-            {
-                staffId: "422970",
-                rosterGrade: "GR1",
-                aadObjectId: "a2d06783-f918-4f4b-af32-5dacb94f1db4",
-            },
-            {
-                staffId: "448210",
-                rosterGrade: "GR2",
-                aadObjectId: "07b8e33c-f86f-440c-ac1f-6725920dbe79",
-            },
-            {
-                staffId: "380824",
-                rosterGrade: "PUR",
-                aadObjectId: "fff2cfa8-0eb6-4fdc-9902-fa0ba06219b3",
-            },
-        ],
-    },
-    {
-        tripId: null,
-        departureTime: new Date("2018-02-08 10:20:00 UTC+4"),
-        flights: [
-            {
-                flightNumber: "209",
-                origin: "DXB",
-                destination: "ATH",
-            },
-            {
-                flightNumber: "209",
-                origin: "ATH",
-                destination: "EWR",
-            },
-            {
-                flightNumber: "210",
-                origin: "EWR",
-                destination: "ATH",
-            },
-            {
-                flightNumber: "210",
-                origin: "ATH",
-                destination: "DXB",
-            },
-        ],
-        crewMembers: [
-            {
-                staffId: "382244",
-                rosterGrade: "PUR",
-                aadObjectId: "d971021e-cc4d-4c7d-8076-aeaaad494fa7",
-            },
-            {
-                staffId: "420873",
-                rosterGrade: "GR1",
-                aadObjectId: "1e45791d-0d96-404c-ac7d-9bf977362b1b",
-            },
-            {
-                staffId: "429465",
-                rosterGrade: "GR2",
-                aadObjectId: "0a971a4f-b0bf-4ce4-8b39-944166165aeb",
-            },
-            {
-                staffId: "442614",
-                rosterGrade: "GR2",
-                aadObjectId: "aeac155e-8202-472b-8a47-d5cf079e35f1",
-            },
-            {
-                staffId: "441994",
-                rosterGrade: "GR2",
-                aadObjectId: "60e66497-bf32-4471-bcb2-253ac2fa20fc",
-            },
-        ],
-    },
-];
 
 // Default settings for new teams
 const teamSettings: teams.Team = {
@@ -242,7 +109,7 @@ export class RootDialog extends builder.IntentDialog
         // By default create trips that depart Dubai a week from now
         let baseDate = inputDate.isValid() ? inputDate.toDate() : new Date(new Date().valueOf() + (7 * 24 * 60 * 60 * 1000));
 
-        let fakeTrips: trips.Trip[] = tripTemplates.map((trip) => {
+        let fakeTrips: trips.Trip[] = sampledata.tripTemplates.map((trip) => {
             let departureTime = trip.departureTime;
             return {
                 ...trip,
@@ -281,7 +148,7 @@ export class RootDialog extends builder.IntentDialog
         let match = addRemoveCrewRegExp.exec(session.message.text);
         let command = match[1];
         let tripId = match[2];
-        let crewMemberId = match[3];
+        let crewMemberEmail = match[3];
 
         let trip = await this.tripsApi.getTripAsync(tripId);
         if (!trip) {
@@ -289,24 +156,26 @@ export class RootDialog extends builder.IntentDialog
             return;
         }
 
+        let crewMember = sampledata.findCrewMemberByUpn(crewMemberEmail);
+        if (!crewMember) {
+            session.send(`A crew member with email ${crewMemberEmail} could not be found`);
+            return;
+        }
+
         let tripName = this.createDisplayNameForTrip(trip);
+        let testTripsApi = <trips.ITripsTest><any>this.tripsApi;
 
         switch (command) {
             case "add":
-                let crewMember: trips.CrewMember = {
-                    aadObjectId : crewMemberId,
-                    staffId: "XXX",
-                    rosterGrade: "GR1",
-                };
                 trip.crewMembers = _(trip.crewMembers).push(crewMember).uniqBy("aadObjectId").value();
-                await (<trips.ITripsTest><any>this.tripsApi).addOrUpdateTripAsync(trip);
-                session.send(`Crew member added to trip roster for ${tripName}`);
+                await testTripsApi.addOrUpdateTripAsync(trip);
+                session.send(`Crew member ${crewMember.displayName} added to trip roster for ${tripName}`);
                 break;
 
             case "remove":
-                trip.crewMembers = trip.crewMembers.filter(member => member.aadObjectId !== crewMemberId);
-                await (<trips.ITripsTest><any>this.tripsApi).addOrUpdateTripAsync(trip);
-                session.send(`Crew member removed from trip roster for ${tripName}`);
+                trip.crewMembers = trip.crewMembers.filter(member => member.aadObjectId !== crewMember.aadObjectId);
+                await testTripsApi.addOrUpdateTripAsync(trip);
+                session.send(`Crew member ${crewMember.displayName} removed from trip roster for ${tripName}`);
                 break;
         }
     }
