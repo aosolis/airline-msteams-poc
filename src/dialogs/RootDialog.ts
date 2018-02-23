@@ -42,7 +42,7 @@ const addRemoveCrewRegExp = /^(add|remove)Crew (.*) (.*)$/i;
 const daysInAdvanceToCreateTrips = 7;       // Create teams for trips departing X days in the future
 const daysInPastToMonitorTrips = 7;         // Actively monitor future trips and trips that departed in the past Y days
 const daysInPastToArchiveTrips = 14;        // Archive teams for trips that departed more that Z days ago
-const archivedTag = "[ARCHIVED] ";          // Tag prepended to team name when it is archived 
+const archivedTag = "[ARCHIVED] ";          // Tag prepended to team name when it is archived
 
 const tripTemplates: trips.Trip[] = [
     {
@@ -326,8 +326,8 @@ export class RootDialog extends builder.IntentDialog
             let groupsToArchive = (await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
                 .filter(groupData => groupData.tripSnapshot.departureTime < maxDepartureTimeToArchive);
 
-            let groupIds = groupsToArchive.map(groupData => groupData.groupId).join(", ");
-            console.log(`Found ${groupsToArchive.length} groups to archive: ${groupIds}`);
+            let groupIdsToArchive = groupsToArchive.map(groupData => groupData.groupId).join(", ");
+            console.log(`Found ${groupsToArchive.length} groups to archive: ${groupIdsToArchive}`);
 
             let teamArchivePromises = groupsToArchive.map(async (groupData) => {
                 try
@@ -342,6 +342,46 @@ export class RootDialog extends builder.IntentDialog
                 }
             });
             await Promise.all(teamArchivePromises);
+
+            // Update existing teams
+            let minDepartureTimeToUpdate = moment(triggerTime).subtract(daysInPastToMonitorTrips, "d").toDate();
+            let groupsToUpdate = (await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(triggerTime))
+                .filter(groupData => groupData.tripSnapshot.departureTime > minDepartureTimeToUpdate);
+
+            let groupIdsToUpdate = groupsToUpdate.map(groupData => groupData.groupId).join(", ");
+            console.log(`Found ${groupsToUpdate.length} groups to update: ${groupIdsToUpdate}`);
+
+            let teamUpdatePromises = groupsToUpdate.map(async (groupData) => {
+                try
+                {
+                    let groupId = groupData.groupId;
+                    let trip = await this.tripsApi.getTripAsync(groupData.tripId);
+
+                    let crewMembers = trip.crewMembers;
+                    let groupMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
+
+                    // Add new crew members to group
+                    let crewMembersToAdd = crewMembers.filter(crewMember =>
+                        !groupMembers.find(groupMember => groupMember.id === crewMember.aadObjectId));
+                    let memberAddPromises = crewMembersToAdd.map((crewMember) => this.teamsApi.addMemberToGroupAsync(groupId, crewMember.aadObjectId));
+                    await Promise.all(memberAddPromises);
+                    console.log(`Added ${crewMembersToAdd.length} new members to group ${groupId}`);
+
+                    // Remove deleted group members
+                    let groupMembersToRemove = groupMembers.filter(groupMember =>
+                        !crewMembers.find(crewMember => groupMember.id === crewMember.aadObjectId));
+                    let memberRemovePromises = groupMembersToRemove.map((groupMember) => this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id));
+                    await Promise.all(memberRemovePromises);
+                    console.log(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
+
+                    groupData.tripSnapshot = trip;
+                    this.appDataStore.addOrUpdateGroupDataAsync(groupData);
+                }
+                catch (e) {
+                    console.error(`Error updating group ${groupData.groupId}: ${e.message}`, e);
+                }
+            });
+            await Promise.all(teamUpdatePromises);
 
             // Create new teams
             let maxDepartureTimeToCreate = moment(triggerTime).add(daysInAdvanceToCreateTrips, "d").toDate();
