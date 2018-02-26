@@ -163,6 +163,35 @@ export abstract class TeamsApi {
         await request.post(options);
     }
 
+    // Remove an owner from a team (group)
+    public async removeOwnerFromGroupAsync(groupId: string, userObjectId: string): Promise<void> {
+        await this.refreshAccessTokenAsync();
+
+        let options = {
+            url: `${graphBaseUrl}/groups/${groupId}/owners/${userObjectId}/$ref`,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        await request.delete(options);
+    }
+
+    // Get the owners of a team (group)
+    public async getOwnersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
+        await this.refreshAccessTokenAsync();
+
+        let options = {
+            url: `${graphBaseUrl}/groups/${groupId}/owners`,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        let responseBody = await request.get(options);
+        return responseBody.value || [];
+    }    
+
     // Add a member to a team (group)
     public async addMemberToGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         await this.refreshAccessTokenAsync();
