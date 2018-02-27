@@ -38,13 +38,14 @@ import { AzureADv1Dialog } from "./AzureADv1Dialog";
 let uuidv4 = require("uuid/v4");
 
 const createTripsRegExp = /^createTrips(.*)$/i;
-const triggerTimeRegExp = /^triggerTime(.*)$/i;
+const showTripRegExp = /^showTrip (.*)$/i;
 const addRemoveCrewRegExp = /^(add|remove)Crew (.*) (.*)$/i;
+const triggerTimeRegExp = /^triggerTime(.*)$/i;
 
 const daysInAdvanceToCreateTrips = 7;       // Create teams for trips departing X days in the future
 const daysInPastToMonitorTrips = 7;         // Actively monitor future trips and trips that departed in the past Y days
 const daysInPastToArchiveTrips = 14;        // Archive teams for trips that departed more that Z days ago
-const archivedTag = "[ARCHIVED] ";          // Tag prepended to team name when it is archived
+const archivedTag = "[ARCHIVED]";           // Tag prepended to team name when it is archived
 
 // Default settings for new teams
 const teamSettings: teams.Team = {
@@ -84,6 +85,7 @@ export class RootDialog extends builder.IntentDialog
 
         // Commands to manipulate trip database and app state
         this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
+        this.matches(showTripRegExp, (session) => { this.handleShowTrip(session); });
         this.matches(addRemoveCrewRegExp, (session) => { this.handleAddRemoveCrew(session); });
         this.matches(/resetState/i, (session) => { this.handleResetState(session); });
 
@@ -133,6 +135,21 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
+    // Show the details of a trip in the database
+    private async handleShowTrip(session: builder.Session): Promise<void> {
+        let tripId = showTripRegExp.exec(session.message.text)[1].trim();
+        let trip = await this.tripsApi.getTripAsync(tripId);
+        if (!trip) {
+            session.send(`Couldn't find a trip with id ${tripId}.`);
+            return;
+        }
+
+        let message = `${this.createDisplayNameForTrip(trip)}<br/>\nRoster:<ol>\n` +
+            trip.crewMembers.map(m => `<li>${m.displayName} (${m.userPrincipalName}) ${m.rosterGrade}</li>`).join("\n") +
+            `\n</ol>`;
+        session.send(message);
+    }
+
     // Delete all trips in the trip database, and all teams that were created
     private async handleResetState(session: builder.Session): Promise<void> {
         // Delete all trips
@@ -159,7 +176,7 @@ export class RootDialog extends builder.IntentDialog
             session.send(`An error occurred while deleting teams: ${e.message}`);
         }
 
-        session.send("I deleted all trips and teams!");
+        session.send("Deleted all trips and teams");
     }
 
     // Add or remove a crew member from a trip
@@ -171,13 +188,13 @@ export class RootDialog extends builder.IntentDialog
 
         let trip = await this.tripsApi.getTripAsync(tripId);
         if (!trip) {
-            session.send(`I couldn't find a trip with id ${tripId}.`);
+            session.send(`Couldn't find a trip with id ${tripId}.`);
             return;
         }
 
         let crewMember = sampledata.findCrewMemberByUpn(crewMemberEmail);
         if (!crewMember) {
-            session.send(`I couldn't find a crew member with email address ${crewMemberEmail}.`);
+            session.send(`Couldn't find a crew member with email address ${crewMemberEmail}`);
             return;
         }
 
@@ -188,13 +205,13 @@ export class RootDialog extends builder.IntentDialog
             case "add":
                 trip.crewMembers = _(trip.crewMembers).push(crewMember).uniqBy("aadObjectId").value();
                 await testTripsApi.addOrUpdateTripAsync(trip);
-                session.send(`I added ${crewMember.displayName} to the trip roster for ${tripName}.`);
+                session.send(`Added ${crewMember.displayName} to the trip roster for ${tripName}.`);
                 break;
 
             case "remove":
                 trip.crewMembers = trip.crewMembers.filter(member => member.aadObjectId !== crewMember.aadObjectId);
                 await testTripsApi.addOrUpdateTripAsync(trip);
-                session.send(`I removed ${crewMember.displayName} from the trip roster for ${tripName}.`);
+                session.send(`Removed ${crewMember.displayName} from the trip roster for ${tripName}.`);
                 break;
         }
     }
@@ -296,7 +313,7 @@ export class RootDialog extends builder.IntentDialog
             });
             await Promise.all(teamCreatePromises);
 
-            session.send(`I finished processing the time trigger for ${triggerTime.toUTCString()}`);
+            session.send(`Finished processing the time trigger for ${triggerTime.toUTCString()}`);
         } catch (e) {
             let errorMessage = `An error occurred while processing time trigger at ${triggerTime.toUTCString()}: ${e.message}`;
             winston.error(errorMessage, e);
@@ -304,26 +321,27 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
-    // Helper to create a legible display name for a trip
+    // Create a legible display name for a trip
     private createDisplayNameForTrip(trip: trips.Trip): string {
-        let flightNumbers = _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
+        let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
-        let dxbDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
-        return `EK${flightNumbers} ${route} ${dxbDepartureDate}`;
+        let dubaiDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
+        return `${flightNumbers} ${route} ${dubaiDepartureDate}`;
     }
 
-    // Create a team for a trip, returning the group id of the newly-created team
+    // Create a team for a trip
     private async createTeamForTripAsync(trip: trips.Trip): Promise<string> {
-        // Create the team
         let team: teams.Team;
+
+        // Create the team
         try {
             let displayName = this.createDisplayNameForTrip(trip);
             team = await this.teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
-            winston.info(`Created a new team, group id is ${team.id}`);
         } catch (e) {
             winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             throw e;
         }
+        winston.info(`Created a new team ${team.id} for trip ${trip.tripId}`);
 
         // Add team members
         let memberAddPromises = trip.crewMembers.map(async crewMember => {
@@ -334,24 +352,59 @@ export class RootDialog extends builder.IntentDialog
             }
         });
         await Promise.all(memberAddPromises);
+        winston.info(`Added ${memberAddPromises.length} members to team ${team.id}`);
 
         return team.id;
     }
 
-    // Archive a team
+    // "Archive" a team
+    // Microsoft Teams doesn't support true archival yet, so instead we will:
+    //  - remove all the users from the team
+    //  - "park" it with an admin user (admins have no cap on the number of groups they can be part of)
+    //  - rename the team to mark it as archived 
     private async archiveTeamAsync(groupId: string): Promise<void> {
-        // Remove all team members
-        let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
-        winston.info(`Found ${teamMembers.length} members in the team`);
+        // Get the id of the user that owns all "archived" teams
+        let archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
 
-        let memberRemovePromises = teamMembers.map(async member => {
-            try {
-                await this.teamsApi.removeMemberFromGroupAsync(groupId, member.id);
-            } catch (e) {
-                winston.error(`Error removing member ${member.id}: ${e.message}`);
-            }
-        });
+        // Get current members and owners
+        let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
+        let teamOwners = await this.teamsApi.getOwnersOfGroupAsync(groupId);
+        winston.info(`Found ${teamMembers.length} members and ${teamOwners.length} owners in the team ${groupId}`);
+
+        // Add the archive owner to group, as both member and owner.
+        // Being a member is optional, but it makes it easier to query for all archived teams using a /me/memberOf query.
+        if (!teamMembers.find(member => member.id.toLowerCase() === archivedTeamOwnerId)) {
+            await this.teamsApi.addMemberToGroupAsync(groupId, archivedTeamOwnerId);
+        }
+        if (!teamOwners.find(owner => owner.id.toLowerCase() === archivedTeamOwnerId)) {
+            await this.teamsApi.addOwnerToGroupAsync(groupId, archivedTeamOwnerId);
+        }
+        winston.info(`Added ${archivedTeamOwnerId} to team ${groupId} as owner and member`);
+
+        // Remove all existing members and owners apart from the archive owner
+        let memberRemovePromises = teamMembers
+            .filter(member => member.id.toLowerCase() !== archivedTeamOwnerId)
+            .map(async member => {
+                try {
+                    await this.teamsApi.removeMemberFromGroupAsync(groupId, member.id);
+                } catch (e) {
+                    winston.error(`Error removing member ${member.id}: ${e.message}`);
+                }
+            });
         await Promise.all(memberRemovePromises);
+        winston.info(`Removed ${memberRemovePromises.length} members from team ${groupId}`);
+
+        let ownerRemovePromises = teamOwners
+            .filter(owner => owner.id.toLowerCase() !== archivedTeamOwnerId)
+            .map(async owner => {
+                try {
+                    await this.teamsApi.removeOwnerFromGroupAsync(groupId, owner.id);
+                } catch (e) {
+                    winston.error(`Error removing owner ${owner.id}: ${e.message}`);
+                }
+            });
+        await Promise.all(ownerRemovePromises);
+        winston.info(`Removed ${ownerRemovePromises.length} owners from team ${groupId}`);
 
         // Rename group to indicate that it has been archived
         let group = await this.teamsApi.getGroupAsync(groupId);
@@ -360,5 +413,6 @@ export class RootDialog extends builder.IntentDialog
                 displayName: `${archivedTag} ${group.displayName}`,
             });
         }
+        winston.info(`Finished archiving team ${groupId}`);
     }
 }
