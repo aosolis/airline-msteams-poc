@@ -37,6 +37,8 @@ export interface UserToken {
     verificationCodeValidated?: boolean;
     // Expiration time of verification code, expressed as a number of milliseconds from midnight, January 1, 1970 Universal Coordinated Time (UTC)
     verificationCodeExpirationTime?: number;
+    // Refresh token
+    refreshToken?: string;
 }
 
 // Generic OAuth2 provider interface
