@@ -22,6 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import * as request from "request-promise";
+import * as winston from "winston";
 
 // =========================================================
 // Teams Graph API
@@ -89,7 +90,7 @@ export interface TeamGuestSettings {
     allowDeleteChannels?: boolean;
 }
 
-// Wrapper around the Teams Graph APIs
+// Wrapper around the Microsoft Graph APIs for Teams
 export abstract class TeamsApi {
 
     protected accessToken: string;
@@ -99,39 +100,69 @@ export abstract class TeamsApi {
     protected abstract async refreshAccessTokenAsync(): Promise<void>;
 
     // Create a new team
+    // Parameters:
+    //   - displayName: team display name
+    //   - description: team description
+    //   - mailNickname: e-mail alias for the team (must be unique within the tenant)
+    //   - teamSettings: team settings
     public async createTeamAsync(displayName: string, description: string, mailNickname: string, teamSettings: Team): Promise<Team>
     {
         await this.refreshAccessTokenAsync();
 
+        // First create a modern group, which we will then convert to a team
         let newGroup = await this.createGroupAsync(displayName, description, mailNickname);
+        winston.info(`Created new group ${newGroup.id}`);
 
-        // The group may not be created yet, so retry up to 3 times, waiting 10 seconds between retries
-        const maxAttempts = 3;
-        const retryWaitInMilliseconds = 10000;
+        // The operation to create a team from a group can fail, particularly when the group is newly-created,
+        // as knowledge about the newly-created group and its owners/members propagates through Azure AD.
+        // To work around this, we retry the attempt several times, with a delay between each retry.
 
-        let lastError: Error;
         let attemptCount = 0;
+        let migrateTeamError: any;
+        const maxAttempts = 5;                      // Max retries
+        const retryWaitInMilliseconds = 10000;      // Delay between each retry (10 s)
+
         while (attemptCount < maxAttempts) {
             attemptCount++;
+
             try {
                 return await this.createTeamFromGroupAsync(newGroup.id, teamSettings);
             } catch (e) {
-                lastError = e;
-                // Allow retry if error is 404
-                if (e.statusCode === 404) {
+                migrateTeamError = e;
+                winston.warn(`Error converting group ${newGroup.id} to a team (attempt #${attemptCount}): ${e.message}`, e);
+
+                if (e.statusCode === 404 || e.statusCode === 500) {
+                    // Retry if status is 404 Not Found or 500 Internal Server Error
                     await new Promise((resolve, reject) => {
                         setTimeout(() => { resolve(); }, retryWaitInMilliseconds);
                     });
+                } else if (e.statusCode === 409) {
+                    // If status is 409 Conflict, a previous attempt succeeded behind the scenes
+                    winston.info(`Treating conflict as success of a previous attempt`);
+                    return await this.getTeamSettingsAsync(newGroup.id);
                 } else {
                     break;
                 }
             }
         }
 
-        throw lastError;
+        // Attempt to delete the group if conversion to a team failed
+        if (migrateTeamError) {
+            winston.error(`Error converting group ${newGroup.id} to a team, will delete it: ${migrateTeamError.message}`, migrateTeamError);
+            try {
+                await this.deleteGroupAsync(newGroup.id);
+            } catch (e) {
+                winston.error(`Failed to delete the group ${newGroup.id}: ${e.message}`, e);
+            }
+        }
+
+        // If we get here there must have been an error
+        throw migrateTeamError;
     }
 
     // Delete a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
     public async deleteGroupAsync(groupId: string): Promise<void> {
         await this.refreshAccessTokenAsync();
 
@@ -145,7 +176,10 @@ export abstract class TeamsApi {
         await request.delete(options);
     }
 
-    // Add a member to a team (group)
+    // Add an owner to a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
+    //   - userObjectId: AAD object id of the owner to add
     public async addOwnerToGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         await this.refreshAccessTokenAsync();
 
@@ -164,6 +198,9 @@ export abstract class TeamsApi {
     }
 
     // Remove an owner from a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
+    //   - userObjectId: AAD object id of the owner to remove
     public async removeOwnerFromGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         await this.refreshAccessTokenAsync();
 
@@ -178,6 +215,9 @@ export abstract class TeamsApi {
     }
 
     // Get the owners of a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
+    // Returns: a list of team owners, or an empty list if there are no owners
     public async getOwnersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
         await this.refreshAccessTokenAsync();
 
@@ -190,9 +230,12 @@ export abstract class TeamsApi {
         };
         let responseBody = await request.get(options);
         return responseBody.value || [];
-    }    
+    }
 
     // Add a member to a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
+    //   - userObjectId: AAD object id of the member to add
     public async addMemberToGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         await this.refreshAccessTokenAsync();
 
@@ -211,6 +254,9 @@ export abstract class TeamsApi {
     }
 
     // Remove a member from a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
+    //   - userObjectId: AAD object id of the member to remove
     public async removeMemberFromGroupAsync(groupId: string, userObjectId: string): Promise<void> {
         await this.refreshAccessTokenAsync();
 
@@ -225,6 +271,9 @@ export abstract class TeamsApi {
     }
 
     // Get the members of a team (group)
+    // Parameters:
+    //   - groupId: team (group) id
+    // Returns: list of team members, or an empty list if the team has no members
     public async getMembersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
         await this.refreshAccessTokenAsync();
 
@@ -240,6 +289,8 @@ export abstract class TeamsApi {
     }
 
     // Get group information
+    // Parameters:
+    //   - groupId: team (group) id
     public async getGroupAsync(groupId: string): Promise<Group> {
         await this.refreshAccessTokenAsync();
 
@@ -254,6 +305,9 @@ export abstract class TeamsApi {
     }
 
     // Update group information
+    // Parameters:
+    //   - groupId: team (group) id
+    //   - groupUpdates: new group information to update, populate only the properties that need to be updated
     public async updateGroupAsync(groupId: string, groupUpdates: Group): Promise<void> {
         await this.refreshAccessTokenAsync();
 
@@ -268,29 +322,11 @@ export abstract class TeamsApi {
         await request.patch(options);
     }
 
-    // Create a new channel
-    public async createChannelAsync(groupId: string, displayName: string, description?: string): Promise<Channel> {
-        await this.refreshAccessTokenAsync();
-
-        let requestBody: Channel = {
-            displayName: displayName,
-        };
-        if (description) {
-            requestBody.description = description;
-        }
-
-        let options = {
-            url: `${graphBaseUrl}/groups/${groupId}/channels`,
-            body: requestBody,
-            json: true,
-            headers: {
-                "Authorization": `Bearer ${this.accessToken}`,
-            },
-        };
-        return await request.post(options);
-    }
-
     // Create a new group
+    // Parameters:
+    //   - displayName: group display name
+    //   - description: group description
+    //   - mailNickname: e-mail alias for the group (must be unique within the tenant)
     private async createGroupAsync(displayName: string, description: string, mailNickname: string): Promise<Group>
     {
         let requestBody: Group = {
@@ -315,6 +351,9 @@ export abstract class TeamsApi {
     }
 
     // Create a team given an existing group
+    // Parameters:
+    //   - groupId: id of the group to convert into a team
+    //   - teamSettings: team settings
     private async createTeamFromGroupAsync(groupId: string, teamSettings: Team): Promise<Team>
     {
         let options = {
@@ -327,9 +366,24 @@ export abstract class TeamsApi {
         };
         return await request.put(options);
     }
+
+    // Get settings for an existing team
+    // Parameters:
+    //   - groupId: team (group) id
+    private async getTeamSettingsAsync(groupId: string): Promise<Team>
+    {
+        let options = {
+            url: `${graphBaseUrl}/groups/${groupId}/team`,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        return await request.get(options);
+    }
 }
 
-// Teams API that uses delegated user permissions
+// Teams API that uses delegated user context
 export class UserContextTeamsApi extends TeamsApi {
 
     constructor(
@@ -348,7 +402,7 @@ export class UserContextTeamsApi extends TeamsApi {
     }
 }
 
-// Teams API that uses application permissions
+// Teams API that uses application context
 export class AppContextTeamsApi extends TeamsApi {
 
     constructor(
@@ -362,10 +416,12 @@ export class AppContextTeamsApi extends TeamsApi {
 
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
+        // Check if the token requires refresh
         if (this.accessToken && (Date.now() < this.expirationTime)) {
             return;
         }
 
+        // Get an access token using the client_credentials grant
         let accessTokenUrl = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
         let params = {
             grant_type: "client_credentials",
@@ -376,6 +432,8 @@ export class AppContextTeamsApi extends TeamsApi {
 
         let response = await request.post({ url: accessTokenUrl, form: params, json: true });
         this.accessToken = response.access_token;
-        this.expirationTime = Date.now() + (response.expires_in * 1000) - (60 * 100);
+
+        const expirationTimeBufferInSeconds = 60;       // Include a 1-minute buffer in the access token expiration time
+        this.expirationTime = Date.now() + ((response.expires_in - expirationTimeBufferInSeconds) * 1000);
     }
 }
