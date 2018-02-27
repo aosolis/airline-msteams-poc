@@ -28,7 +28,7 @@ import * as winston from "winston";
 // Teams Graph API
 // =========================================================
 
-const graphBaseUrl = "https://graph.microsoft.com/testTeamsTestEnv";
+const graphBaseUrl = "https://graph.microsoft.com/testTeamsDevEnv";
 
 export interface DirectoryObject {
     id: string;
