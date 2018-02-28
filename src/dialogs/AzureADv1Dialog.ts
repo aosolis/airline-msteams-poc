@@ -37,7 +37,7 @@ export class AzureADv1Dialog extends builder.IntentDialog
 
     constructor() {
         super();
-        this.providerName = constants.IdentityProviders.azureADv1;
+        this.providerName = constants.IdentityProvider.azureADv1;
     }
 
     // Register the dialog with the bot

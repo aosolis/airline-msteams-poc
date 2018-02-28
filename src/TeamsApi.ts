@@ -23,12 +23,15 @@
 
 import * as request from "request-promise";
 import * as winston from "winston";
+import * as constants from "./constants";
+import { IAppDataStore } from "./storage/AppDataStore";
 
 // =========================================================
 // Teams Graph API
 // =========================================================
 
 const graphBaseUrl = "https://graph.microsoft.com/testTeamsDevEnv";
+const expirationTimeBufferInSeconds = 60;
 
 export interface DirectoryObject {
     id: string;
@@ -387,18 +390,47 @@ export abstract class TeamsApi {
 export class UserContextTeamsApi extends TeamsApi {
 
     constructor(
-        accessToken: string,
-        expirationTime: number,
+        private appDataStore: IAppDataStore,
+        private appId: string,
+        private appPassword: string,
     )
     {
         super();
-        this.accessToken = accessToken;
-        this.expirationTime = expirationTime;
     }
 
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
-        // This does not support refresh
+        // Load token from the app data store
+        let userToken = await this.appDataStore.getAppDataAsync(constants.AppDataKey.userToken);
+        if (!userToken) {
+            throw new Error("No user token available");
+        }
+
+        this.accessToken = userToken.accessToken;
+        this.expirationTime = userToken.expirationTime;
+
+        // Check if the token requires refresh
+        if (this.accessToken && ((Date.now() + (expirationTimeBufferInSeconds * 1000)) < this.expirationTime)) {
+            return;
+        }
+
+        // Refresh the access token
+        const accessTokenUrl = "https://login.microsoftonline.com/common/oauth2/token";
+        let params = {
+            grant_type: "refresh_token",
+            refresh_token: userToken.refreshToken,
+            client_id: this.appId,
+            client_secret: this.appPassword,
+            resource: "https://graph.microsoft.com",
+        } as any;
+
+        let body = await request.post({ url: accessTokenUrl, form: params, json: true });
+        this.accessToken = userToken.accessToken =  body.access_token;
+        this.expirationTime = userToken.expirationTime = body.expires_on * 1000;
+        userToken.refreshToken = body.refresh_token;
+
+        // Update the token in the app data store
+        await this.appDataStore.setAppDataAsync(constants.AppDataKey.userToken, userToken);
     }
 }
 
@@ -417,12 +449,12 @@ export class AppContextTeamsApi extends TeamsApi {
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
         // Check if the token requires refresh
-        if (this.accessToken && (Date.now() < this.expirationTime)) {
+        if (this.accessToken && ((Date.now() + (expirationTimeBufferInSeconds * 1000)) < this.expirationTime)) {
             return;
         }
 
         // Get an access token using the client_credentials grant
-        let accessTokenUrl = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
+        const accessTokenUrl = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
         let params = {
             grant_type: "client_credentials",
             client_id: this.appId,
@@ -430,10 +462,8 @@ export class AppContextTeamsApi extends TeamsApi {
             scope: "https://graph.microsoft.com/.default",
         };
 
-        let response = await request.post({ url: accessTokenUrl, form: params, json: true });
-        this.accessToken = response.access_token;
-
-        const expirationTimeBufferInSeconds = 60;       // Include a 1-minute buffer in the access token expiration time
-        this.expirationTime = Date.now() + ((response.expires_in - expirationTimeBufferInSeconds) * 1000);
+        let body = await request.post({ url: accessTokenUrl, form: params, json: true });
+        this.accessToken = body.access_token;
+        this.expirationTime = Date.now() + (body.expires_in * 1000);
     }
 }

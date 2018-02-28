@@ -46,9 +46,9 @@ const triggerTimeRegExp = /^triggerTime(.*)$/i;
 // Root dialog for driving the bot
 export class RootDialog extends builder.IntentDialog
 {
-    private teamsApi: teams.TeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
     private tripsApi: trips.ITripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
     private appDataStore: IAppDataStore = new MongoDbAppDataStore(config.get("mongoDb.connectionString"));
+    private teamsApi: teams.TeamsApi = new teams.UserContextTeamsApi(this.appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
     private teamsUpdater: TeamsUpdater = new TeamsUpdater(this.tripsApi, this.teamsApi, this.appDataStore);
 
     constructor() {
@@ -80,10 +80,10 @@ export class RootDialog extends builder.IntentDialog
     // Handle resumption of dialog
     public dialogResumed<T>(session: builder.Session, result: builder.IDialogResult<T>): void {
         // The only dialog we branch to is auth
-        let userToken = utils.getUserToken(session, constants.IdentityProviders.azureADv1);
+        let userToken = utils.getUserToken(session, constants.IdentityProvider.azureADv1);
         if (userToken) {
-            this.teamsApi = new teams.UserContextTeamsApi(userToken.accessToken, userToken.expirationTime);
-            this.teamsUpdater = new TeamsUpdater(this.tripsApi, this.teamsApi, this.appDataStore);
+            // Update the user token that the app uses to create teams
+            this.appDataStore.setAppDataAsync(constants.AppDataKey.userToken, userToken);
         }
     }
 

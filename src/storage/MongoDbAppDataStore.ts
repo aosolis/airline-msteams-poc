@@ -123,7 +123,7 @@ export class MongoDbAppDataStore implements IAppDataStore {
             key: key,
             data: data,
         };
-        await this.teamsCollection.updateOne(filter, document, { upsert: true });
+        await this.appDataCollection.updateOne(filter, document, { upsert: true });
     }
 
     // Returns a promise that is resolved when this instance is initialized

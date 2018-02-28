@@ -143,7 +143,7 @@ export class TeamsUpdater
                 };
                 await this.appDataStore.addOrUpdateGroupDataAsync(newGroupData);
 
-                winston.info(`Team ${groupId} created for trip ${trip.tripId} departing DXB on ${trip.departureTime.toUTCString()}`);
+                winston.info(`Team ${groupId} created for trip ${trip.tripId} departing on ${trip.departureTime.toUTCString()}`);
             }
         });
         await Promise.all(teamCreatePromises);

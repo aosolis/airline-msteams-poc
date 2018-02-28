@@ -25,20 +25,22 @@
 export const messageType = "message";
 export const invokeType = "invoke";
 
+// App data store keys
+// tslint:disable-next-line:variable-name
+export const AppDataKey = {
+    userToken: "userToken",
+};
+
 // Identity providers
 // tslint:disable-next-line:variable-name
-export const IdentityProviders = {
-    linkedIn: "linkedIn",
+export const IdentityProvider = {
     azureADv1: "azureADv1",
-    google: "google",
 };
 
 // Dialog ids
 // tslint:disable-next-line:variable-name
 export const DialogId = {
-    LinkedIn: "LinkedIn",
     AzureADv1: "AzureADv1",
-    Google: "Google",
     Root: "/",
 };
 
