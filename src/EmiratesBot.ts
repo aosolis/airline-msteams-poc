@@ -64,7 +64,11 @@ export class EmiratesBot extends builder.UniversalBot {
         });
 
         // Register dialogs
-        new RootDialog().register(this);
+        new RootDialog(
+            botSettings.appDataStore,
+            botSettings.tripsApi,
+            botSettings.teamsUpdater,
+        ).register(this);
     }
 
     // Handle OAuth callbacks

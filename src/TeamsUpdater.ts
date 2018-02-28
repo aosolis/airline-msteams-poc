@@ -52,11 +52,15 @@ const teamSettings: teams.Team = {
 // Updates teams to be in sync with trips
 export class TeamsUpdater
 {
+    private archivedTeamOwnerId: string;
+
     constructor(
         private tripsApi: trips.ITripsApi,              // Interface to the trips database
         private teamsApi: teams.TeamsApi,               // Interface to the teams Graph API
         private appDataStore: IAppDataStore,            // Interface to the app data store
     ) {
+        // Get the id of the user that owns all "archived" teams
+        this.archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
     }
 
     // Handle a trigger to update
@@ -149,8 +153,24 @@ export class TeamsUpdater
         await Promise.all(teamCreatePromises);
     }
 
-    // Create a legible display name for a trip
-    private createDisplayNameForTrip(trip: trips.Trip): string {
+    // Delete all the teams that this updater created
+    public async deleteAllTrackedTeamsAsync(): Promise<void> {
+        let teams = await this.appDataStore.getAllGroupsAsync();
+        winston.info(`Found ${teams.length} teams to delete`);
+
+        let deleteTeamPromises = teams.map(async (groupData) => {
+            let groupId = groupData.groupId;
+            winston.info(`Deleting group ${groupId}`);
+
+            await this.teamsApi.deleteGroupAsync(groupId);
+
+            await this.appDataStore.deleteGroupDataAsync(groupId);
+        });
+        await Promise.all(deleteTeamPromises);
+    }
+
+    // Get a legible display name for a trip
+    private getDisplayNameForTrip(trip: trips.Trip): string {
         let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
         let dubaiDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
@@ -163,7 +183,7 @@ export class TeamsUpdater
 
         // Create the team
         try {
-            let displayName = this.createDisplayNameForTrip(trip);
+            let displayName = this.getDisplayNameForTrip(trip);
             team = await this.teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
         } catch (e) {
             winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
@@ -191,9 +211,6 @@ export class TeamsUpdater
     //  - "park" it with an admin user (admins have no cap on the number of groups they can be part of)
     //  - rename the team to mark it as archived
     private async archiveTeamAsync(groupId: string): Promise<void> {
-        // Get the id of the user that owns all "archived" teams
-        let archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
-
         // Get current members and owners
         let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
         let teamOwners = await this.teamsApi.getOwnersOfGroupAsync(groupId);
@@ -201,17 +218,17 @@ export class TeamsUpdater
 
         // Add the archive owner to group, as both member and owner.
         // Being a member is optional, but it makes it easier to query for all archived teams using a /me/memberOf query.
-        if (!teamMembers.find(member => member.id.toLowerCase() === archivedTeamOwnerId)) {
-            await this.teamsApi.addMemberToGroupAsync(groupId, archivedTeamOwnerId);
+        if (!teamMembers.find(member => member.id.toLowerCase() === this.archivedTeamOwnerId)) {
+            await this.teamsApi.addMemberToGroupAsync(groupId, this.archivedTeamOwnerId);
         }
-        if (!teamOwners.find(owner => owner.id.toLowerCase() === archivedTeamOwnerId)) {
-            await this.teamsApi.addOwnerToGroupAsync(groupId, archivedTeamOwnerId);
+        if (!teamOwners.find(owner => owner.id.toLowerCase() === this.archivedTeamOwnerId)) {
+            await this.teamsApi.addOwnerToGroupAsync(groupId, this.archivedTeamOwnerId);
         }
-        winston.info(`Added ${archivedTeamOwnerId} to team ${groupId} as owner and member`);
+        winston.info(`Added ${this.archivedTeamOwnerId} to team ${groupId} as owner and member`);
 
         // Remove all existing members and owners apart from the archive owner
         let memberRemovePromises = teamMembers
-            .filter(member => member.id.toLowerCase() !== archivedTeamOwnerId)
+            .filter(member => member.id.toLowerCase() !== this.archivedTeamOwnerId)
             .map(async member => {
                 try {
                     await this.teamsApi.removeMemberFromGroupAsync(groupId, member.id);
@@ -223,7 +240,7 @@ export class TeamsUpdater
         winston.info(`Removed ${memberRemovePromises.length} members from team ${groupId}`);
 
         let ownerRemovePromises = teamOwners
-            .filter(owner => owner.id.toLowerCase() !== archivedTeamOwnerId)
+            .filter(owner => owner.id.toLowerCase() !== this.archivedTeamOwnerId)
             .map(async owner => {
                 try {
                     await this.teamsApi.removeOwnerFromGroupAsync(groupId, owner.id);

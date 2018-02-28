@@ -3,3 +3,5 @@
 export * from "./BotExtendedStorage";
 export * from "./MongoDbBotStorage";
 export * from "./NullBotStorage";
+export * from "./AppDataStore";
+export * from "./MongoDbAppDataStore";

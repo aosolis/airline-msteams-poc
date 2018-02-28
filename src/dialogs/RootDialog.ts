@@ -23,17 +23,13 @@
 
 import * as _ from "lodash";
 import * as winston from "winston";
-import * as config from "config";
 import * as builder from "botbuilder";
 import * as moment from "moment";
 import * as constants from "../constants";
 import * as utils from "../utils";
-import * as teams from "../TeamsApi";
 import * as trips from "../trips/TripsApi";
 import * as sampledata from "../data/SampleData";
-import { MongoDbTripsApi } from "../trips/MongoDbTripsApi";
 import { IAppDataStore } from "../storage/AppDataStore";
-import { MongoDbAppDataStore } from "../storage/MongoDbAppDataStore";
 import { AzureADv1Dialog } from "./AzureADv1Dialog";
 import { TeamsUpdater } from "../TeamsUpdater";
 let uuidv4 = require("uuid/v4");
@@ -44,20 +40,18 @@ const addRemoveCrewRegExp = /^(add|remove)Crew (.*) (.*)$/i;
 const triggerTimeRegExp = /^triggerTime(.*)$/i;
 
 // Root dialog for driving the bot
-export class RootDialog extends builder.IntentDialog
-{
-    private tripsApi: trips.ITripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
-    private appDataStore: IAppDataStore = new MongoDbAppDataStore(config.get("mongoDb.connectionString"));
-    private teamsApi: teams.TeamsApi = new teams.UserContextTeamsApi(this.appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
-    private teamsUpdater: TeamsUpdater = new TeamsUpdater(this.tripsApi, this.teamsApi, this.appDataStore);
+export class RootDialog extends builder.IntentDialog {
 
-    constructor() {
+    constructor(
+        private appDataStore: IAppDataStore,
+        private tripsApi: trips.ITripsApi,
+        private teamsUpdater: TeamsUpdater,
+    ) {
         super();
     }
 
     // Register the dialog with the bot
     public register(bot: builder.UniversalBot): void {
-        // Register dialogs
         bot.dialog(constants.DialogId.Root, this);
         new AzureADv1Dialog().register(bot, this);
 
@@ -110,7 +104,7 @@ export class RootDialog extends builder.IntentDialog
         try {
             await Promise.all(addPromises);
 
-            let tripInfo = fakeTrips.map(trip => `${this.createDisplayNameForTrip(trip)} (${trip.tripId})`).join(", ");
+            let tripInfo = fakeTrips.map(trip => `${this.getDisplayNameForTrip(trip)} (${trip.tripId})`).join(", ");
             session.send(`Created ${fakeTrips.length} trips: ${tripInfo}`);
         } catch (e) {
             winston.error(`Error creating trips: ${e.message}`, e);
@@ -127,7 +121,7 @@ export class RootDialog extends builder.IntentDialog
             return;
         }
 
-        let message = `${this.createDisplayNameForTrip(trip)}<br/>\nRoster:<ol>\n` +
+        let message = `${this.getDisplayNameForTrip(trip)}<br/>\nRoster:<ol>\n` +
             trip.crewMembers.map(m => `<li>${m.displayName} (${m.userPrincipalName}) ${m.rosterGrade}</li>`).join("\n") +
             `\n</ol>`;
         session.send(message);
@@ -138,28 +132,20 @@ export class RootDialog extends builder.IntentDialog
         // Delete all trips
         try {
             await (<trips.ITripsTest><any>this.tripsApi).deleteAllTripsAsync();
+            winston.info(`Deleted all trips from trip database`);
         } catch (e) {
             winston.error(`Error deleting trips: ${e.message}`, e);
-            session.send(`An error occurred while deleting trips: ${e.message}`);
         }
 
         // Delete all teams
         try {
-            let teams = await this.appDataStore.getAllGroupsAsync();
-            let deleteTeamPromises = teams.map(async (groupData) => {
-                let groupId = groupData.groupId;
-                winston.info(`Deleting group ${groupId}`);
-
-                await this.teamsApi.deleteGroupAsync(groupId);
-                await this.appDataStore.deleteGroupDataAsync(groupId);
-            });
-            await Promise.all(deleteTeamPromises);
+            await this.teamsUpdater.deleteAllTrackedTeamsAsync();
+            winston.info(`Deleted all tracked teams`);
         } catch (e) {
             winston.error(`Error deleting teams: ${e.message}`, e);
-            session.send(`An error occurred while deleting teams: ${e.message}`);
         }
 
-        session.send("Deleted all trips and teams");
+        session.send("Finished processing reset request");
     }
 
     // Add or remove a crew member from a trip
@@ -181,7 +167,7 @@ export class RootDialog extends builder.IntentDialog
             return;
         }
 
-        let tripName = this.createDisplayNameForTrip(trip);
+        let tripName = this.getDisplayNameForTrip(trip);
         let testTripsApi = <trips.ITripsTest><any>this.tripsApi;
 
         switch (command) {
@@ -219,8 +205,8 @@ export class RootDialog extends builder.IntentDialog
         }
     }
 
-    // Create a legible display name for a trip
-    private createDisplayNameForTrip(trip: trips.Trip): string {
+    // Get a legible display name for a trip
+    private getDisplayNameForTrip(trip: trips.Trip): string {
         let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
         let dubaiDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");

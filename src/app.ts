@@ -35,7 +35,10 @@ import * as msteams from "botbuilder-teams";
 import * as winston from "winston";
 import * as storage from "./storage";
 import * as providers from "./providers";
+import * as teams from "./TeamsApi";
 import { EmiratesBot } from "./EmiratesBot";
+import { MongoDbTripsApi } from "./trips/MongoDbTripsApi";
+import { TeamsUpdater } from "./TeamsUpdater";
 
 let app = express();
 
@@ -66,6 +69,12 @@ switch (botStorageProvider) {
         break;
 }
 
+// Configure APIs
+let appDataStore = new storage.MongoDbAppDataStore(config.get("mongoDb.connectionString"));
+let teamsApi = new teams.UserContextTeamsApi(this.appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
+let tripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
+let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore);
+
 // Create chat bot
 let connector = new msteams.TeamsChatConnector({
     appId: config.get("bot.appId"),
@@ -74,6 +83,9 @@ let connector = new msteams.TeamsChatConnector({
 let botSettings = {
     storage: botStorage,
     azureADv1: new providers.AzureADv1Provider(config.get("bot.appId"), config.get("bot.appPassword")),
+    teamsApi: teamsApi,
+    tripsApi: tripsApi,
+    teamsUpdater: teamsUpdater,
 };
 let bot = new EmiratesBot(connector, botSettings, app);
 
@@ -84,8 +96,6 @@ bot.on("error", (error: Error) => {
 
 // Configure bot routes
 app.post("/api/messages", connector.listen());
-
-// Configure auth routes
 app.get("/auth/azureADv1/callback", (req, res) => {
     bot.handleOAuthCallback(req, res, "azureADv1");
 });
