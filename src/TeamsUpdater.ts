@@ -195,7 +195,7 @@ export class TeamsUpdater
 
     // Archive old teams
     private async archiveTeamsAsync(triggerTime: Date): Promise<void> {
-        // Archive active teams created for trips that have departed more than "daysInPastToArchiveTrips" ago 
+        // Archive active teams created for trips that have departed more than "daysInPastToArchiveTrips" ago
         let maxDepartureTimeToArchive = moment(triggerTime).subtract(daysInPastToArchiveTrips, "d").toDate();
         let groupsToArchive = (await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
             .filter(groupData => groupData.tripSnapshot.departureTime < maxDepartureTimeToArchive);

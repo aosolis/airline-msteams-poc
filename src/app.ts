@@ -100,6 +100,18 @@ app.post("/api/messages", connector.listen());
 app.get("/auth/azureADv1/callback", (req, res) => {
     bot.handleOAuthCallback(req, res, "azureADv1");
 });
+app.get("/adminconsent/callback", (req, res) => {
+    res.render("adminconsent-callback", {
+        appId: config.get("bot.appId"),
+        baseUri: config.get("app.baseUri"),
+    });
+});
+app.get("/test-dashboard", (req, res) => {
+    res.render("test-dashboard", {
+        appId: config.get("bot.appId"),
+        baseUri: config.get("app.baseUri"),
+    });
+});
 
 // Update teams route
 let apiKey = config.get("app.apiKey");
