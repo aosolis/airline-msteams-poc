@@ -71,7 +71,7 @@ switch (botStorageProvider) {
 
 // Configure APIs
 let appDataStore = new storage.MongoDbAppDataStore(config.get("mongoDb.connectionString"));
-let teamsApi = new teams.UserContextTeamsApi(this.appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
+let teamsApi = new teams.UserContextTeamsApi(appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
 let tripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
 let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore);
 
@@ -83,7 +83,7 @@ let connector = new msteams.TeamsChatConnector({
 let botSettings = {
     storage: botStorage,
     azureADv1: new providers.AzureADv1Provider(config.get("bot.appId"), config.get("bot.appPassword")),
-    teamsApi: teamsApi,
+    appDataStore: appDataStore,
     tripsApi: tripsApi,
     teamsUpdater: teamsUpdater,
 };
