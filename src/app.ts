@@ -32,6 +32,7 @@ let logger = require("morgan");
 import * as config from "config";
 import * as builder from "botbuilder";
 import * as msteams from "botbuilder-teams";
+import * as moment from "moment";
 import * as winston from "winston";
 import * as storage from "./storage";
 import * as providers from "./providers";
@@ -94,13 +95,39 @@ bot.on("error", (error: Error) => {
     winston.error(error.message, error);
 });
 
-// Configure bot routes
+// Bot routes
 app.post("/api/messages", connector.listen());
 app.get("/auth/azureADv1/callback", (req, res) => {
     bot.handleOAuthCallback(req, res, "azureADv1");
 });
 
-// Configure ping route
+// Update teams route
+let apiKey = config.get("app.apiKey");
+app.post("/api/updateTeams", async (req, res) => {
+    let apiKeyHeader = req.headers["x-api-key"];
+    if (apiKeyHeader !== apiKey) {
+        winston.error("Invalid api key");
+        res.sendStatus(401);
+        return;
+    }
+
+    try {
+        let date = new Date();
+        let dateParameter = req.params["date"];
+        if (dateParameter) {
+            winston.info(`Simulating update for date ${dateParameter}`);
+            date = moment(dateParameter).toDate();
+        }
+
+        await teamsUpdater.updateTeamsAsync(date);
+        res.status(200).send(date.toUTCString());
+    } catch (e) {
+        winston.error("Update teams failed", e);
+        res.sendStatus(500);
+    }
+});
+
+// Ping route
 app.get("/ping", (req, res) => {
     res.status(200).send("OK");
 });
