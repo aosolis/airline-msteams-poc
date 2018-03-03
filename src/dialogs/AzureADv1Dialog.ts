@@ -140,7 +140,7 @@ export class AzureADv1Dialog extends builder.IntentDialog
             let authUrl = this.authProvider.getAuthorizationUrl(state);
 
             // Build the sign-in url
-            let signinUrl = config.get("app.baseUri") + `/html/auth-start.html#authorizationUrl=${encodeURIComponent(authUrl)}`;
+            let signinUrl = config.get("app.baseUri") + `/html/auth-start.html?authorizationUrl=${encodeURIComponent(authUrl)}`;
 
             // Send card with signin action
             let msg = new builder.Message(session)

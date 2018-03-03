@@ -32,9 +32,9 @@
     <script type="text/javascript">
         microsoftTeams.initialize();
 
-        // Parse hash parameters
+        // Parse query parameters
         let queryParams = {};
-        location.hash.substr(1).split("&").forEach(function(item) {
+        location.search.substr(1).split("&").forEach(function(item) {
             let s = item.split("="),
             k = s[0],
             v = s[1] && decodeURIComponent(s[1]);
