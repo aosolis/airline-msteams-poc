@@ -124,7 +124,7 @@ export class AzureADv1Dialog extends builder.IntentDialog
             // Create the OAuth state, including a random anti-forgery state token
             let address = session.message.address;
             let state = JSON.stringify({
-                securityToken: uuidv4(),
+                security: uuidv4(),
                 address: {
                     user: {
                         id: address.user.id,
