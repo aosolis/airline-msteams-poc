@@ -30,7 +30,7 @@ import { IAppDataStore } from "./storage/AppDataStore";
 // Teams Graph API
 // =========================================================
 
-const graphBaseUrl = "https://graph.microsoft.com/testTeamsDevEnv";
+const graphBaseUrl = "https://graph.microsoft.com/testTeamsTestEnv";
 const expirationTimeBufferInSeconds = 60;
 
 export interface DirectoryObject {
@@ -156,6 +156,63 @@ export abstract class TeamsApi {
                 await this.deleteGroupAsync(newGroup.id);
             } catch (e) {
                 winston.error(`Failed to delete the group ${newGroup.id}: ${e.message}`, e);
+            }
+        }
+
+        // If we get here there must have been an error
+        throw migrateTeamError;
+    }
+
+    // Create a new team
+    // Parameters:
+    //   - displayName: team display name
+    //   - description: team description
+    //   - mailNickname: e-mail alias for the team (must be unique within the tenant)
+    //   - teamSettings: team settings
+    public async createTeamFromGroupAsync(groupId: string, teamSettings: Team): Promise<Team>
+    {
+        await this.refreshAccessTokenAsync();
+
+        // The operation to create a team from a group can fail, particularly when the group is newly-created,
+        // as knowledge about the newly-created group and its owners/members propagates through Azure AD.
+        // To work around this, we retry the attempt several times, with a delay between each retry.
+
+        let attemptCount = 0;
+        let migrateTeamError: any;
+        const maxAttempts = 5;                      // Max retries
+        const retryWaitInMilliseconds = 10000;      // Delay between each retry (10 s)
+
+        while (attemptCount < maxAttempts) {
+            attemptCount++;
+
+            try {
+                return await this.createTeamFromGroupHelper(groupId, teamSettings);
+            } catch (e) {
+                migrateTeamError = e;
+                winston.warn(`Error converting group ${groupId} to a team (attempt #${attemptCount}): ${e.message}`, e);
+
+                if (e.statusCode === 404 || e.statusCode === 500) {
+                    // Retry if status is 404 Not Found or 500 Internal Server Error
+                    await new Promise((resolve, reject) => {
+                        setTimeout(() => { resolve(); }, retryWaitInMilliseconds);
+                    });
+                } else if (e.statusCode === 409) {
+                    // If status is 409 Conflict, a previous attempt succeeded behind the scenes
+                    winston.info(`Treating conflict as success of a previous attempt`);
+                    return await this.getTeamSettingsAsync(groupId);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Attempt to delete the group if conversion to a team failed
+        if (migrateTeamError) {
+            winston.error(`Error converting group ${groupId} to a team, will delete it: ${migrateTeamError.message}`, migrateTeamError);
+            try {
+                await this.deleteGroupAsync(groupId);
+            } catch (e) {
+                winston.error(`Failed to delete the group ${groupId}: ${e.message}`, e);
             }
         }
 
@@ -330,8 +387,10 @@ export abstract class TeamsApi {
     //   - displayName: group display name
     //   - description: group description
     //   - mailNickname: e-mail alias for the group (must be unique within the tenant)
-    private async createGroupAsync(displayName: string, description: string, mailNickname: string): Promise<Group>
+    public async createGroupAsync(displayName: string, description: string, mailNickname: string): Promise<Group>
     {
+        await this.refreshAccessTokenAsync();
+
         let requestBody: Group = {
             displayName: displayName,
             description: description,
@@ -357,7 +416,7 @@ export abstract class TeamsApi {
     // Parameters:
     //   - groupId: id of the group to convert into a team
     //   - teamSettings: team settings
-    private async createTeamFromGroupAsync(groupId: string, teamSettings: Team): Promise<Team>
+    private async createTeamFromGroupHelper(groupId: string, teamSettings: Team): Promise<Team>
     {
         let options = {
             url: `${graphBaseUrl}/groups/${groupId}/team`,

@@ -126,30 +126,32 @@ export class TeamsUpdater
 
     // Create a team for a trip
     private async createTeamForTripAsync(trip: trips.Trip): Promise<string> {
-        let team: teams.Team;
+        let group: teams.Group;
 
         // Create the team
         try {
             let displayName = this.getDisplayNameForTrip(trip);
             let description = this.getDescriptionForTrip(trip);
-            team = await this.teamsApi.createTeamAsync(displayName, description, trip.tripId, teamSettings);
+            group = await this.teamsApi.createGroupAsync(displayName, description, trip.tripId);
         } catch (e) {
             winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             throw e;
         }
-        winston.info(`Created a new team ${team.id} for trip ${trip.tripId}`);
+        winston.info(`Created a new group ${group.id} for trip ${trip.tripId}`);
 
         // Add team members
         let memberAddPromises = trip.crewMembers.map(async crewMember => {
             try {
-                await this.teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
+                await this.teamsApi.addMemberToGroupAsync(group.id, crewMember.aadObjectId);
             } catch (e) {
                 winston.error(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`, e);
             }
         });
         await Promise.all(memberAddPromises);
-        winston.info(`Added ${memberAddPromises.length} members to team ${team.id}`);
+        winston.info(`Added ${memberAddPromises.length} members to group ${group.id}`);
 
+        // Convert group to team
+        let team = await this.teamsApi.createTeamFromGroupAsync(group.id, teamSettings);
         return team.id;
     }
 
