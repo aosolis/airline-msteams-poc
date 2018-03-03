@@ -43,7 +43,7 @@
             // Construct the trigger date and time
             let date = $("#triggerDate")[0].valueAsDate;
             let time = $("#triggerTime")[0].valueAsDate;
-            let dateTime = new Date(date.getYear(), date.getMonth(), date.getDate(), time.getHours(), time.getMinutes());
+            let dateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), time.getHours(), time.getMinutes());
 
             // Trigger the update
             $.ajax({
