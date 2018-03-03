@@ -240,7 +240,7 @@ export class TeamsUpdater
         }
         winston.info(`Added ${this.archivedTeamOwnerId} to team ${groupId} as owner and member`);
 
-        // Remove all existing members and owners apart from the archive owner
+        // Remove all existing members
         let memberRemovePromises = teamMembers
             .filter(member => member.id.toLowerCase() !== this.archivedTeamOwnerId)
             .map(async member => {
@@ -253,6 +253,16 @@ export class TeamsUpdater
         await Promise.all(memberRemovePromises);
         winston.info(`Removed ${memberRemovePromises.length} members from team ${groupId}`);
 
+        // Rename group to indicate that it has been archived
+        let group = await this.teamsApi.getGroupAsync(groupId);
+        if (!group.displayName.startsWith(archivedTag)) {
+            await this.teamsApi.updateGroupAsync(groupId, {
+                displayName: `${archivedTag} ${group.displayName}`,
+            });
+        }
+
+        // Remove all other owners. This needs to be done last, as we cannot modify the team
+        // once we have relinquished ownership over it.
         let ownerRemovePromises = teamOwners
             .filter(owner => owner.id.toLowerCase() !== this.archivedTeamOwnerId)
             .map(async owner => {
@@ -265,13 +275,6 @@ export class TeamsUpdater
         await Promise.all(ownerRemovePromises);
         winston.info(`Removed ${ownerRemovePromises.length} owners from team ${groupId}`);
 
-        // Rename group to indicate that it has been archived
-        let group = await this.teamsApi.getGroupAsync(groupId);
-        if (!group.displayName.startsWith(archivedTag)) {
-            await this.teamsApi.updateGroupAsync(groupId, {
-                displayName: `${archivedTag} ${group.displayName}`,
-            });
-        }
         winston.info(`Finished archiving team ${groupId}`);
     }
 }
