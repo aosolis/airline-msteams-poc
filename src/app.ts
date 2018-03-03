@@ -125,7 +125,7 @@ app.post("/api/updateTeams", async (req, res) => {
 
     try {
         let date = new Date();
-        let dateParameter = req.params["date"];
+        let dateParameter = req.query["date"];
         if (dateParameter) {
             winston.info(`Simulating update for date ${dateParameter}`);
             date = moment(dateParameter).toDate();

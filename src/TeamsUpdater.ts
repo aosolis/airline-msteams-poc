@@ -65,6 +65,7 @@ export class TeamsUpdater
 
     // Handle a trigger to update teams
     public async updateTeamsAsync(triggerTime: Date): Promise<void> {
+        winston.info(`Updating teams based on trigger time ${triggerTime.toUTCString()}`);
         await this.archiveTeamsAsync(triggerTime);
         await this.updateExistingTeamsAsync(triggerTime);
         await this.createTeamsAsync(triggerTime);
