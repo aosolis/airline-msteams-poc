@@ -28,13 +28,16 @@
     <title>Test Dashboard</title>
 </head>
 <body>
-    <p>Test page to simulate an update trigger. Enter the API key and trigger date and time, then press "Simulate".</p>
+    <h2>Simulate time trigger</h2>
+    <p>Enter the API key and trigger date and time, then press "Simulate".</p>
     <p/>
-    <div>Api key: <input style="width: 400" id="apiKey" type="text"></input></div>
+    <div>Api key: <input style="width: 600" id="apiKey" type="text"></input></div>
     <div>Date: <input id="triggerDate" type="date"></input></div>
     <div>Time: <input style="width: 145" id="triggerTime" type="time" value="00:00"></input></div>
-    <button onclick="trigger()">Simulate</button>
-    <p/>
+    <div><button onclick="trigger()">Simulate</button></div>
+    <div id="divStatus"></div>
+
+    <h2>Permissions</h2>
     <a href="https://login.microsoftonline.com/common/adminconsent?client_id={{appId}}&state=12345&redirect_uri={{baseUri}}/adminconsent/callback">Grant admin consent to app</a>
 
     <script src="https://code.jquery.com/jquery-3.1.1.js" integrity="sha384-VC7EHu0lDzZyFfmjTPJq+DFyIn8TUGAJbEtpXquazFVr00Q/OOx//RjiZ9yU9+9m" crossorigin="anonymous"></script>
@@ -43,9 +46,11 @@
             // Construct the trigger date and time
             let date = $("#triggerDate")[0].valueAsDate;
             let time = $("#triggerTime")[0].valueAsDate;
-            let dateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), time.getHours(), time.getMinutes());
+            let dateTime = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), time.getHours(), time.getMinutes()));
 
             // Trigger the update
+            let status = "Simulating update for date " + date.toISOString() + "...";
+            $("#divStatus").text(status);
             $.ajax({
                 method: "POST",
                 url: window.location.origin + "/api/updateTeams?date=" + dateTime.toISOString(),
@@ -53,10 +58,11 @@
                     request.setRequestHeader("X-Api-Key", $("#apiKey")[0].value);
                 },
                 success: function (date) {
-                    console.log("Simulated update for date" + date);
+                    $("#divStatus").text(status + " Done!");
                 },
                 error: function (xhr, textStatus, errorThrown) {
                     console.log("textStatus: " + textStatus + ", errorThrown:" + errorThrown);
+                    $("#divStatus").text(status + " Error!");
                 },
             });
         }

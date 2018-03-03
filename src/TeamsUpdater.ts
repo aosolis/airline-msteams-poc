@@ -165,7 +165,7 @@ export class TeamsUpdater
         let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
         let departureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
-        return `${flightNumbers} (${route}) departs on ${departureDate}`;
+        return `${flightNumbers} (${route}) on ${departureDate}`;
     }
 
     // Update existing teams
