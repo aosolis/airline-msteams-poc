@@ -124,13 +124,6 @@ const crewMembers: trips.CrewMember[] = [
         userPrincipalName: "HenriettaM@M365x146188.onmicrosoft.com",
     },
     {
-        staffId: "429465",
-        rosterGrade: "GR2",
-        aadObjectId: "0a971a4f-b0bf-4ce4-8b39-944166165aeb",
-        displayName: "Humayd Zaher",
-        userPrincipalName: "HumaydZ@M365x146188.onmicrosoft.com",
-    },
-    {
         staffId: "442614",
         rosterGrade: "GR2",
         aadObjectId: "aeac155e-8202-472b-8a47-d5cf079e35f1",
@@ -184,8 +177,6 @@ export const tripTemplates: trips.Trip[] = [
             findCrewMemberByUpn("DiegoS@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("EmilyB@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("EnricoC@M365x146188.onmicrosoft.com"),
-            findCrewMemberByUpn("AdrianaN@M365x146188.onmicrosoft.com"),
-            findCrewMemberByUpn("GebhardS@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("GiorgiaA@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("AdeleV@M365x146188.onmicrosoft.com"),
         ],
@@ -218,9 +209,10 @@ export const tripTemplates: trips.Trip[] = [
         crewMembers: [
             findCrewMemberByUpn("ChristieC@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("HenriettaM@M365x146188.onmicrosoft.com"),
-            findCrewMemberByUpn("HumaydZ@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("IrvinS@M365x146188.onmicrosoft.com"),
             findCrewMemberByUpn("IsaiahL@M365x146188.onmicrosoft.com"),
+            findCrewMemberByUpn("AdrianaN@M365x146188.onmicrosoft.com"),
+            findCrewMemberByUpn("GebhardS@M365x146188.onmicrosoft.com"),
         ],
     },
 ];

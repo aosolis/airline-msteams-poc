@@ -58,6 +58,7 @@ export class TeamsUpdater
         private tripsApi: trips.ITripsApi,              // Interface to the trips database
         private teamsApi: teams.TeamsApi,               // Interface to the teams Graph API
         private appDataStore: IAppDataStore,            // Interface to the app data store
+        private appTeamsApi: teams.TeamsApi,            // Interface to the teams Graph API, using app context
     ) {
         // Get the id of the user that owns all "archived" teams
         this.archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
@@ -80,7 +81,15 @@ export class TeamsUpdater
             let groupId = groupData.groupId;
             winston.info(`Deleting group ${groupId}`);
 
-            await this.teamsApi.deleteGroupAsync(groupId);
+            try {
+                await this.appTeamsApi.deleteGroupAsync(groupId);
+            } catch (e) {
+                if (e.statusCode === 404) {
+                    // Not found, ok
+                } else {
+                    throw e;
+                }
+            }
 
             await this.appDataStore.deleteGroupDataAsync(groupId);
         });
@@ -122,7 +131,8 @@ export class TeamsUpdater
         // Create the team
         try {
             let displayName = this.getDisplayNameForTrip(trip);
-            team = await this.teamsApi.createTeamAsync(displayName, null, trip.tripId, teamSettings);
+            let description = this.getDescriptionForTrip(trip);
+            team = await this.teamsApi.createTeamAsync(displayName, description, trip.tripId, teamSettings);
         } catch (e) {
             winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             throw e;
@@ -146,9 +156,16 @@ export class TeamsUpdater
     // Get a legible display name for a trip
     private getDisplayNameForTrip(trip: trips.Trip): string {
         let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
+        let departureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
+        return `${flightNumbers} ${departureDate}`;
+    }
+
+    // Get a legible description name for a trip
+    private getDescriptionForTrip(trip: trips.Trip): string {
+        let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
         let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
-        let dubaiDepartureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
-        return `${flightNumbers} ${route} ${dubaiDepartureDate}`;
+        let departureDate = moment(trip.departureTime).utcOffset(240).format("YYYY-MM-DD");
+        return `${flightNumbers} (${route}) departs on ${departureDate}`;
     }
 
     // Update existing teams

@@ -73,8 +73,9 @@ switch (botStorageProvider) {
 // Configure APIs
 let appDataStore = new storage.MongoDbAppDataStore(config.get("mongoDb.connectionString"));
 let teamsApi = new teams.UserContextTeamsApi(appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
+let appTeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
 let tripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
-let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore);
+let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore, appTeamsApi);
 
 // Create chat bot
 let connector = new msteams.TeamsChatConnector({
