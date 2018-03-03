@@ -63,6 +63,7 @@ export class RootDialog extends builder.IntentDialog {
         this.matches(createTripsRegExp, (session) => { this.handleCreateTrips(session); });
         this.matches(showTripRegExp, (session) => { this.handleShowTrip(session); });
         this.matches(addRemoveCrewRegExp, (session) => { this.handleAddRemoveCrew(session); });
+        this.matches(/deleteTeams/i, (session) => { this.handleDeleteTeams(session); });
         this.matches(/resetState/i, (session) => { this.handleResetState(session); });
 
         // Commands to simulate an update trigger at a given time
@@ -125,6 +126,19 @@ export class RootDialog extends builder.IntentDialog {
             trip.crewMembers.map(m => `<li>${m.displayName} (${m.userPrincipalName}) ${m.rosterGrade}</li>`).join("\n") +
             `\n</ol>`;
         session.send(message);
+    }
+
+    // Delete all teams that were created
+    private async handleDeleteTeams(session: builder.Session): Promise<void> {
+        // Delete all teams
+        try {
+            await this.teamsUpdater.deleteAllTrackedTeamsAsync();
+            winston.info(`Deleted all tracked teams`);
+        } catch (e) {
+            winston.error(`Error deleting teams: ${e.message}`, e);
+        }
+
+        session.send("Finished processing reset request");
     }
 
     // Delete all trips in the trip database, and all teams that were created
