@@ -34,6 +34,8 @@ const daysInPastToMonitorTrips = 7;             // Actively monitor future trips
 const daysInPastToArchiveTrips = 14;            // Archive teams for trips that departed more than Z days ago
 const archivedTag = "[ARCHIVED]";               // Tag prepended to team name when it is archived
 
+const teamCreationDelayInSeconds = 15;          // Seconds to wait after creating a team, before adding members to it
+
 // Default settings for new teams
 const teamSettings: teams.Team = {
     memberSettings: {
@@ -126,32 +128,35 @@ export class TeamsUpdater
 
     // Create a team for a trip
     private async createTeamForTripAsync(trip: trips.Trip): Promise<string> {
-        let group: teams.Group;
+        let team: teams.Team;
 
         // Create the team
         try {
             let displayName = this.getDisplayNameForTrip(trip);
             let description = this.getDescriptionForTrip(trip);
-            group = await this.teamsApi.createGroupAsync(displayName, description, trip.tripId);
+            team = await this.teamsApi.createTeamAsync(displayName, description, trip.tripId, teamSettings);
         } catch (e) {
             winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             throw e;
         }
-        winston.info(`Created a new group ${group.id} for trip ${trip.tripId}`);
+        winston.info(`Created a new group ${team.id} for trip ${trip.tripId}`);
+
+        winston.info(`Waiting ${teamCreationDelayInSeconds} seconds`);
+        await new Promise((resolve, reject) => {
+            setTimeout(() => { resolve(); }, teamCreationDelayInSeconds * 1000);
+        });
 
         // Add team members
         let memberAddPromises = trip.crewMembers.map(async crewMember => {
             try {
-                await this.teamsApi.addMemberToGroupAsync(group.id, crewMember.aadObjectId);
+                await this.teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
             } catch (e) {
                 winston.error(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`, e);
             }
         });
         await Promise.all(memberAddPromises);
-        winston.info(`Added ${memberAddPromises.length} members to group ${group.id}`);
+        winston.info(`Added ${memberAddPromises.length} members to group ${team.id}`);
 
-        // Convert group to team
-        let team = await this.teamsApi.createTeamFromGroupAsync(group.id, teamSettings);
         return team.id;
     }
 
