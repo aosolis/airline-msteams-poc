@@ -53,7 +53,7 @@ export class AzureADv1Dialog extends builder.IntentDialog
 
     // Handle start of dialog
     private async onDialogBegin(session: builder.Session, args: any, next: () => void): Promise<void> {
-        switch (args.matched.input) {
+        switch (args.matched.input.trim()) {
             case "login":
                 this.handleLogin(session);
                 break;
