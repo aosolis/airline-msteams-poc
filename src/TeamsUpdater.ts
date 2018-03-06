@@ -34,7 +34,7 @@ const daysInPastToMonitorTrips = 7;             // Actively monitor future trips
 const daysInPastToArchiveTrips = 14;            // Archive teams for trips that departed more than Z days ago
 const archivedTag = "[ARCHIVED]";               // Tag prepended to team name when it is archived
 
-const teamCreationDelayInSeconds = 15;          // Seconds to wait after creating a team, before adding members to it
+const teamCreationDelayInSeconds = 10;          // Seconds to wait after creating a team, before adding members to it
 
 // Default settings for new teams
 const teamSettings: teams.Team = {
