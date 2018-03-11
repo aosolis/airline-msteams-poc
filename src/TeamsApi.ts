@@ -102,6 +102,9 @@ export abstract class TeamsApi {
     // Refresh the access token
     protected abstract async refreshAccessTokenAsync(): Promise<void>;
 
+    // Returns true if the API is acting in app context
+    protected abstract isAppContext(): boolean;
+
     // Create a new team
     // Parameters:
     //   - displayName: team display name
@@ -412,6 +415,9 @@ export class UserContextTeamsApi extends TeamsApi {
         super();
     }
 
+    // Returns true if the API is acting in app context
+    protected isAppContext() { return false; }
+
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
         // Load token from the app data store
@@ -459,6 +465,9 @@ export class AppContextTeamsApi extends TeamsApi {
     {
         super();
     }
+
+    // Returns true if the API is acting in app context
+    protected isAppContext() { return true; }
 
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
