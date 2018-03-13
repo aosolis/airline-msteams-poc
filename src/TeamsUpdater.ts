@@ -54,6 +54,7 @@ const teamSettings: teams.Team = {
 // Updates teams to be in sync with trips
 export class TeamsUpdater
 {
+    private activeTeamOwnerId: string;
     private archivedTeamOwnerId: string;
 
     constructor(
@@ -62,6 +63,9 @@ export class TeamsUpdater
         private appDataStore: IAppDataStore,            // Interface to the app data store
         private appTeamsApi: teams.TeamsApi,            // Interface to the teams Graph API, using app context
     ) {
+        // Get the id of the user that owns all active teams
+        this.activeTeamOwnerId = config.get("app.activeTeamOwnerId").toLowerCase();
+
         // Get the id of the user that owns all "archived" teams
         this.archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
     }
@@ -128,19 +132,46 @@ export class TeamsUpdater
 
     // Create a team for a trip
     private async createTeamForTripAsync(trip: trips.Trip): Promise<string> {
+        let group: teams.Group;
         let team: teams.Team;
 
         // Create the team
         try {
             let displayName = this.getDisplayNameForTrip(trip);
             let description = this.getDescriptionForTrip(trip);
-            team = await this.teamsApi.createTeamAsync(displayName, description, trip.tripId, teamSettings);
+
+            // First create a modern group
+            group = await this.teamsApi.createGroupAsync(displayName, description, trip.tripId);
+            winston.info(`Created new group ${group.id}`);
+
+            // If wé're acting in app context, a user owner needs to be added to the group
+            if (this.teamsApi.isInAppContext()) {
+                await Promise.all([
+                    this.teamsApi.addOwnerToGroupAsync(group.id, this.activeTeamOwnerId),
+                    this.teamsApi.addMemberToGroupAsync(group.id, this.activeTeamOwnerId),
+                ]);
+            }
+
+            // Convert the group into a team
+            team = await this.teamsApi.createTeamFromGroupAsync(group.id, teamSettings);
         } catch (e) {
             winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
+
+            // If we failed to convert the group to a team, clean up after ourselves by deleting the group
+            if (group) {
+                winston.error(`Error converting group ${group.id} to a team, will delete the group`);
+                try {
+                    await this.teamsApi.deleteGroupAsync(group.id);
+                } catch (deleteError) {
+                    winston.error(`Failed to delete the group ${group.id}: ${deleteError.message}`, deleteError);
+                }
+            }
+
             throw e;
         }
         winston.info(`Created a new group ${team.id} for trip ${trip.tripId}`);
 
+        // Wait a few seconds for the team info to propagate
         winston.info(`Waiting ${teamCreationDelayInSeconds} seconds`);
         await new Promise((resolve, reject) => {
             setTimeout(() => { resolve(); }, teamCreationDelayInSeconds * 1000);
@@ -188,23 +219,27 @@ export class TeamsUpdater
         let teamUpdatePromises = groupsToUpdate.map(async (groupData) => {
             try
             {
+                // Get trip info
                 let groupId = groupData.groupId;
                 let trip = await this.tripsApi.getTripAsync(groupData.tripId);
 
+                // Get current members of the team
                 let crewMembers = trip.crewMembers;
                 let groupMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
 
                 // Add new crew members to group
                 let crewMembersToAdd = crewMembers.filter(crewMember =>
                     !groupMembers.find(groupMember => groupMember.id === crewMember.aadObjectId));
-                let memberAddPromises = crewMembersToAdd.map((crewMember) => this.teamsApi.addMemberToGroupAsync(groupId, crewMember.aadObjectId));
+                let memberAddPromises = crewMembersToAdd.map(
+                    (crewMember) => this.teamsApi.addMemberToGroupAsync(groupId, crewMember.aadObjectId));
                 await Promise.all(memberAddPromises);
                 winston.info(`Added ${crewMembersToAdd.length} new members to group ${groupId}`);
 
                 // Remove deleted group members
                 let groupMembersToRemove = groupMembers.filter(groupMember =>
                     !crewMembers.find(crewMember => groupMember.id === crewMember.aadObjectId));
-                let memberRemovePromises = groupMembersToRemove.map((groupMember) => this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id));
+                let memberRemovePromises = groupMembersToRemove.map(
+                    (groupMember) => this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id));
                 await Promise.all(memberRemovePromises);
                 winston.info(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
 
@@ -249,13 +284,13 @@ export class TeamsUpdater
     //  - "park" it with an admin user (admins have no cap on the number of groups they can be part of)
     //  - rename the team to mark it as archived
     private async archiveTeamAsync(groupId: string): Promise<void> {
-        // Get current members and owners
+        // Get current members and owners (restricted to users only)
         let teamMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
         let teamOwners = await this.teamsApi.getOwnersOfGroupAsync(groupId);
         winston.info(`Found ${teamMembers.length} members and ${teamOwners.length} owners in the team ${groupId}`);
 
-        // Add the archive owner to group, as both member and owner.
-        // Being a member is optional, but it makes it easier to query for all archived teams using a /me/memberOf query.
+        // Add the archive owner to group, as both member and owner
+        // Being a member is optional, but it makes it easier to query for all archived teams using a /me/memberOf query
         if (!teamMembers.find(member => member.id.toLowerCase() === this.archivedTeamOwnerId)) {
             await this.teamsApi.addMemberToGroupAsync(groupId, this.archivedTeamOwnerId);
         }
@@ -286,7 +321,8 @@ export class TeamsUpdater
         }
 
         // Remove all other owners. This needs to be done last, as we cannot modify the team
-        // once we have relinquished ownership over it.
+        // once we have relinquished ownership over it (this happens when using user context;
+        // in app context the app remains a group owner).
         let ownerRemovePromises = teamOwners
             .filter(owner => owner.id.toLowerCase() !== this.archivedTeamOwnerId)
             .map(async owner => {

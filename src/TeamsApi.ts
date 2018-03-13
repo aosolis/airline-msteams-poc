@@ -31,9 +31,11 @@ import { IAppDataStore } from "./storage/AppDataStore";
 // =========================================================
 
 const graphBaseUrl = "https://graph.microsoft.com/testTeamsTestEnv";
+const graphUserType = "#microsoft.graph.user";
 const expirationTimeBufferInSeconds = 60;
 
 export interface DirectoryObject {
+    "@odata.type"?: string;
     id: string;
 }
 
@@ -103,24 +105,36 @@ export abstract class TeamsApi {
     protected abstract async refreshAccessTokenAsync(): Promise<void>;
 
     // Returns true if the API is acting in app context
-    protected abstract isAppContext(): boolean;
+    public abstract isInAppContext(): boolean;
 
-    // Create a new team
+    // Create a new group
     // Parameters:
-    //   - displayName: team display name
-    //   - description: team description
-    //   - mailNickname: e-mail alias for the team (must be unique within the tenant)
-    //   - teamSettings: team settings
-    public async createTeamAsync(displayName: string, description: string, mailNickname: string, teamSettings: Team): Promise<Team>
+    //   - displayName: group display name
+    //   - description: group description
+    //   - mailNickname: e-mail alias for the group (must be unique within the tenant)
+    public async createGroupAsync(displayName: string, description: string, mailNickname: string): Promise<Group>
     {
         await this.refreshAccessTokenAsync();
 
-        // First create a modern group
-        let newGroup = await this.createGroupAsync(displayName, description, mailNickname);
-        winston.info(`Created new group ${newGroup.id}`);
+        let requestBody: Group = {
+            displayName: displayName,
+            description: description,
+            mailEnabled: true,
+            mailNickname: mailNickname,
+            securityEnabled: false,
+            visibility: "private",
+            groupTypes: [ "unified" ],
+        };
 
-        // Convert the group into a team
-        return await this.createTeamFromGroupAsync(newGroup.id, teamSettings);
+        let options = {
+            url: `${graphBaseUrl}/groups`,
+            body: requestBody,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        return await request.post(options);
     }
 
     // Convert the group into team
@@ -176,6 +190,24 @@ export abstract class TeamsApi {
 
         // If we get here there must have been an error
         throw migrateTeamError;
+    }
+
+    // Create a new team
+    // Parameters:
+    //   - displayName: team display name
+    //   - description: team description
+    //   - mailNickname: e-mail alias for the team (must be unique within the tenant)
+    //   - teamSettings: team settings
+    public async createTeamAsync(displayName: string, description: string, mailNickname: string, teamSettings: Team): Promise<Team>
+    {
+        await this.refreshAccessTokenAsync();
+
+        // First create a modern group
+        let newGroup = await this.createGroupAsync(displayName, description, mailNickname);
+        winston.info(`Created new group ${newGroup.id}`);
+
+        // Convert the group into a team
+        return await this.createTeamFromGroupAsync(newGroup.id, teamSettings);
     }
 
     // Delete a team (group)
@@ -235,8 +267,10 @@ export abstract class TeamsApi {
     // Get the owners of a team (group)
     // Parameters:
     //   - groupId: team (group) id
+    //   - restrictToUsers: pass "true" to return only owners of type user
     // Returns: a list of team owners, or an empty list if there are no owners
-    public async getOwnersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
+    // tslint:disable-next-line:typedef
+    public async getOwnersOfGroupAsync(groupId: string, restrictToUsers = true): Promise<DirectoryObject[]> {
         await this.refreshAccessTokenAsync();
 
         let options = {
@@ -247,7 +281,13 @@ export abstract class TeamsApi {
             },
         };
         let responseBody = await request.get(options);
-        return responseBody.value || [];
+        let owners = responseBody.value || [];
+
+        if (restrictToUsers) {
+            owners = owners.filter(owner => owner["@odata.type"] === graphUserType);
+        }
+
+        return owners;
     }
 
     // Add a member to a team (group)
@@ -340,36 +380,6 @@ export abstract class TeamsApi {
         await request.patch(options);
     }
 
-    // Create a new group
-    // Parameters:
-    //   - displayName: group display name
-    //   - description: group description
-    //   - mailNickname: e-mail alias for the group (must be unique within the tenant)
-    public async createGroupAsync(displayName: string, description: string, mailNickname: string): Promise<Group>
-    {
-        await this.refreshAccessTokenAsync();
-
-        let requestBody: Group = {
-            displayName: displayName,
-            description: description,
-            mailEnabled: true,
-            mailNickname: mailNickname,
-            securityEnabled: false,
-            visibility: "private",
-            groupTypes: [ "unified" ],
-        };
-
-        let options = {
-            url: `${graphBaseUrl}/groups`,
-            body: requestBody,
-            json: true,
-            headers: {
-                "Authorization": `Bearer ${this.accessToken}`,
-            },
-        };
-        return await request.post(options);
-    }
-
     // Create a team given an existing group
     // Parameters:
     //   - groupId: id of the group to convert into a team
@@ -416,7 +426,7 @@ export class UserContextTeamsApi extends TeamsApi {
     }
 
     // Returns true if the API is acting in app context
-    protected isAppContext() { return false; }
+    public isInAppContext(): boolean { return false; }
 
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
@@ -467,7 +477,7 @@ export class AppContextTeamsApi extends TeamsApi {
     }
 
     // Returns true if the API is acting in app context
-    protected isAppContext() { return true; }
+    public isInAppContext(): boolean { return true; }
 
     // Refresh the access token
     protected async refreshAccessTokenAsync(): Promise<void> {
