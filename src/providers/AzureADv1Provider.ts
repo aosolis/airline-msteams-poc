@@ -61,19 +61,20 @@ export class AzureADv1Provider implements IOAuth2Provider {
             state: state,
         } as any;
         if (extraParams) {
-            params = { ...extraParams, ...params };
+            params = { ...params, ...extraParams };
         }
         return authorizationUrl + "?" + querystring.stringify(params);
     }
 
     // Redeem the authorization code for an access token
-    public async getAccessTokenAsync(code: string): Promise<UserToken> {
+    public async getAccessTokenAsync(code: string, replyUrl?: string): Promise<UserToken> {
+        replyUrl = replyUrl || config.get("app.baseUri") + callbackPath;
         let params = {
             grant_type: "authorization_code",
             code: code,
             client_id: this.clientId,
             client_secret: this.clientSecret,
-            redirect_uri: config.get("app.baseUri") + callbackPath,
+            redirect_uri: replyUrl,
             resource: "https://graph.microsoft.com",
         } as any;
 
@@ -86,6 +87,7 @@ export class AzureADv1Provider implements IOAuth2Provider {
                         accessToken: body.access_token,
                         expirationTime: body.expires_on * 1000,
                         refreshToken: body.refresh_token,
+                        idToken: body.id_token,
                     });
                 }
             });

@@ -1,0 +1,21 @@
+{
+  "name": "emirates-poc-trigger",
+  "version": "0.0.1",
+  "description": "Emirates Team Management Trigger",
+  "author": {
+    "name": "Adrian Solis"
+  },
+  "license": "MIT",
+  "private": true,
+  "main": "app.js",
+  "scripts": {
+  },
+  "engines": {
+    "node": "7.7.4"
+  },
+  "dependencies": {
+    "request": "^2.85.0"
+  },
+  "devDependencies": {
+  }
+}

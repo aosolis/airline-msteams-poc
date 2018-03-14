@@ -5,7 +5,7 @@
         "tenantId": "a5bbb9df-06cc-47f4-8f24-981a2024b94c",
         "activeTeamOwnerId": "274254bb-a270-47b5-8922-d76041edf5e8",
         "archivedTeamOwnerId": "afb71dc2-929d-40bc-9505-e61fb06356fb",
-        "apiContext": "app",
+        "apiContext": "user",
         "apiKey": "<secret>"
     },
     "bot": {

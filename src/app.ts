@@ -30,16 +30,18 @@ let http = require("http");
 let path = require("path");
 let logger = require("morgan");
 import * as config from "config";
-import * as builder from "botbuilder";
 import * as msteams from "botbuilder-teams";
+import * as jwt from "jsonwebtoken";
 import * as moment from "moment";
 import * as winston from "winston";
+import * as constants from "./constants";
 import * as storage from "./storage";
 import * as providers from "./providers";
 import * as teams from "./TeamsApi";
 import { EmiratesBot } from "./EmiratesBot";
 import { MongoDbTripsApi } from "./trips/MongoDbTripsApi";
 import { TeamsUpdater } from "./TeamsUpdater";
+import { UserContextLogin } from "./UserContextLogin";
 
 let app = express();
 
@@ -55,68 +57,17 @@ let handlebars = exphbs.create({
 app.engine("hbs", handlebars.engine);
 app.set("view engine", "hbs");
 
-// Configure storage
-let botStorageProvider = config.get("storage");
-let botStorage = null;
-switch (botStorageProvider) {
-    case "mongoDb":
-        botStorage = new storage.MongoDbBotStorage(config.get("mongoDb.botStateCollection"), config.get("mongoDb.connectionString"));
-        break;
-    case "memory":
-        botStorage = new builder.MemoryBotStorage();
-        break;
-    case "null":
-        botStorage = new storage.NullBotStorage();
-        break;
-}
-
-// Configure APIs
+// Configure API dependencies
 let appDataStore = new storage.MongoDbAppDataStore(config.get("mongoDb.connectionString"));
 let userTeamsApi = new teams.UserContextTeamsApi(appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
 let appTeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
 let tripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
+let aadProvider = new providers.AzureADv1Provider(config.get("bot.appId"), config.get("bot.appPassword"));
 
 let teamsApi = (config.get("app.apiContext") === "user") ? userTeamsApi : appTeamsApi;
 let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore, appTeamsApi);
 
-// Create chat bot
-let connector = new msteams.TeamsChatConnector({
-    appId: config.get("bot.appId"),
-    appPassword: config.get("bot.appPassword"),
-});
-let botSettings = {
-    storage: botStorage,
-    azureADv1: new providers.AzureADv1Provider(config.get("bot.appId"), config.get("bot.appPassword")),
-    appDataStore: appDataStore,
-    tripsApi: tripsApi,
-    teamsUpdater: teamsUpdater,
-};
-let bot = new EmiratesBot(connector, botSettings, app);
-
-// Log bot errors
-bot.on("error", (error: Error) => {
-    winston.error(error.message, error);
-});
-
-// Bot routes
-app.post("/api/messages", connector.listen());
-app.get("/auth/azureADv1/callback", (req, res) => {
-    bot.handleOAuthCallback(req, res, "azureADv1");
-});
-app.get("/adminconsent/callback", (req, res) => {
-    res.render("adminconsent-callback", {
-        appId: config.get("bot.appId"),
-        baseUri: config.get("app.baseUri"),
-    });
-});
-app.get("/test-dashboard", (req, res) => {
-    res.render("test-dashboard", {
-        appId: config.get("bot.appId"),
-        baseUri: config.get("app.baseUri"),
-    });
-});
-
-// Update teams route
+// Update teams
 let apiKey = config.get("app.apiKey");
 app.post("/api/updateTeams", async (req, res) => {
     let apiKeyHeader = req.headers["x-api-key"];
@@ -140,6 +91,70 @@ app.post("/api/updateTeams", async (req, res) => {
         winston.error("Update teams failed", e);
         res.sendStatus(500);
     }
+});
+
+// Admin consent callback
+app.get("/adminconsent/callback", (req, res) => {
+    res.render("adminconsent-callback", {
+        appId: config.get("bot.appId"),
+        baseUri: config.get("app.baseUri"),
+    });
+});
+
+// User context management
+let userContextLogin = new UserContextLogin(appDataStore, aadProvider);
+app.get("/usercontext/login", async (req, res) => {
+    await userContextLogin.handleLogin(req, res);
+});
+app.get("/usercontext/callback", async (req, res) => {
+    await userContextLogin.handleCallback(req, res);
+});
+
+// Test dashboard
+app.get("/test-dashboard", async (req, res) => {
+    let isUserContext = (config.get("app.apiContext") === "user");
+    let renderContext = {
+        appId: config.get("bot.appId"),
+        baseUri: config.get("app.baseUri"),
+        isUserContext: isUserContext,
+    };
+
+    // Get additional info for user context
+    if (isUserContext) {
+        let userToken = await appDataStore.getAppDataAsync(constants.AppDataKey.userToken);
+        if (userToken && userToken.idToken) {
+            let decodedToken = jwt.decode(userToken.idToken, { complete: true });
+            renderContext["name"] = decodedToken.payload.name;
+            renderContext["upn"] = decodedToken.payload.upn;
+        }
+    }
+
+    res.render("test-dashboard", renderContext);
+});
+
+// Create bot
+let connector = new msteams.TeamsChatConnector({
+    appId: config.get("bot.appId"),
+    appPassword: config.get("bot.appPassword"),
+});
+let botSettings = {
+    storage: new storage.MongoDbBotStorage(config.get("mongoDb.botStateCollection"), config.get("mongoDb.connectionString")),
+    azureADv1: aadProvider,
+    appDataStore: appDataStore,
+    tripsApi: tripsApi,
+    teamsUpdater: teamsUpdater,
+};
+let bot = new EmiratesBot(connector, botSettings, app);
+
+// Log bot errors
+bot.on("error", (error: Error) => {
+    winston.error(error.message, error);
+});
+
+// Bot routes
+app.post("/api/messages", connector.listen());
+app.get("/auth/azureADv1/callback", (req, res) => {
+    bot.handleOAuthCallback(req, res, "azureADv1");
 });
 
 // Ping route

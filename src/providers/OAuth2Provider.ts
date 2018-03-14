@@ -39,6 +39,8 @@ export interface UserToken {
     verificationCodeExpirationTime?: number;
     // Refresh token
     refreshToken?: string;
+    // ID token
+    idToken?: string;
 }
 
 // Generic OAuth2 provider interface
@@ -51,6 +53,6 @@ export interface IOAuth2Provider {
     getAuthorizationUrl(state: string, extraParams?: any): string;
 
     // Redeem the authorization code for an access token
-    getAccessTokenAsync(code: string): Promise<UserToken>;
+    getAccessTokenAsync(code: string, replyUrl?: string): Promise<UserToken>;
 
 }

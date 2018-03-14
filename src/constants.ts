@@ -28,6 +28,7 @@ export const invokeType = "invoke";
 // App data store keys
 // tslint:disable-next-line:variable-name
 export const AppDataKey = {
+    oauthState: "oauthState",
     userToken: "userToken",
 };
 

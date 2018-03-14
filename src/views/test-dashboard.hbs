@@ -28,6 +28,7 @@
     <title>Test Dashboard</title>
 </head>
 <body>
+    <!-- Simulate time trigger -->
     <h2>Simulate time trigger</h2>
     <p>Enter the API key and trigger date and time, then press "Simulate".</p>
     <p/>
@@ -37,8 +38,23 @@
     <div><button onclick="trigger()">Simulate</button></div>
     <div id="divStatus"></div>
 
+    <!-- Tenant admin consent -->
     <h2>Permissions</h2>
-    <a href="https://login.microsoftonline.com/common/adminconsent?client_id={{appId}}&state=12345&redirect_uri={{baseUri}}/adminconsent/callback">Grant admin consent to app</a>
+    <p>To manage teams, this app requires permissions that requires tenant administrator consent.</p>
+    <p><a href="https://login.microsoftonline.com/common/adminconsent?client_id={{appId}}&state=12345&redirect_uri={{baseUri}}/adminconsent/callback">Grant admin consent</a></p>
+
+    <!-- User context information -->
+    {{#if isUserContext}}
+    <h2>User context</h2>
+    {{#if name}}
+    <p>The app will manage teams as {{name}} ({{upn}}).</p>
+    <p><a href="/usercontext/login" target="_blank">Change user</a></p>
+    {{else}}
+    <p>Click on the link below and login as the user whose identity the app will use to manage teams.</p>
+    <p><a href="/usercontext/login" target="_blank">Set user</a></p>
+    {{/if}}
+    {{/if}}
+
 
     <script src="https://code.jquery.com/jquery-3.1.1.js" integrity="sha384-VC7EHu0lDzZyFfmjTPJq+DFyIn8TUGAJbEtpXquazFVr00Q/OOx//RjiZ9yU9+9m" crossorigin="anonymous"></script>
     <script type="text/javascript">

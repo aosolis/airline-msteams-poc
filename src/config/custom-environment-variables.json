@@ -3,6 +3,7 @@
         "baseUri": "BASE_URI",
         "instrumentationKey": "APPINSIGHTS_INSTRUMENTATIONKEY",
         "tenantId": "TENANT_ID",
+        "activeTeamOwnerId": "ACTIVETEAM_OWNER_ID",
         "archivedTeamOwnerId": "ARCHIVEDTEAM_OWNER_ID",
         "apiKey": "API_KEY"
     },
