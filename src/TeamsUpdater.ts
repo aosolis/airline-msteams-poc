@@ -59,9 +59,9 @@ export class TeamsUpdater
 
     constructor(
         private tripsApi: trips.ITripsApi,              // Interface to the trips database
-        private teamsApi: teams.TeamsApi,               // Interface to the teams Graph API
+        private teamsApi: teams.TeamsApi,               // Interface to the Teams Graph API
         private appDataStore: IAppDataStore,            // Interface to the app data store
-        private appTeamsApi: teams.TeamsApi,            // Interface to the teams Graph API, using app context
+        private appTeamsApi: teams.TeamsApi,            // Interface to the Teams Graph API, using app context
     ) {
         // Get the id of the user that owns all active teams
         this.activeTeamOwnerId = config.get("app.activeTeamOwnerId").toLowerCase();
@@ -73,12 +73,13 @@ export class TeamsUpdater
     // Handle a trigger to update teams
     public async updateTeamsAsync(triggerTime: Date): Promise<void> {
         winston.info(`Updating teams based on trigger time ${triggerTime.toUTCString()}`);
+
         await this.archiveTeamsAsync(triggerTime);
         await this.updateExistingTeamsAsync(triggerTime);
         await this.createTeamsAsync(triggerTime);
     }
 
-    // Delete all the teams that this updater created
+    // Delete all the teams that we created (for testing)
     public async deleteAllTrackedTeamsAsync(): Promise<void> {
         let teams = await this.appDataStore.getAllGroupsAsync();
         winston.info(`Found ${teams.length} teams to delete`);
@@ -112,19 +113,25 @@ export class TeamsUpdater
         winston.info(`Found ${trips.length} trips that depart at the following times ${departureTimes}`);
 
         let teamCreatePromises = trips.map(async (trip) => {
-            let groupData = await this.appDataStore.getGroupDataByTripAsync(trip.tripId);
-            if (!groupData) {
-                let groupId = await this.createTeamForTripAsync(trip);
+            try {
+                // Create a team for the trip if we don't have one yet
+                let groupData = await this.appDataStore.getGroupDataByTripAsync(trip.tripId);
+                if (!groupData) {
+                    let groupId = await this.createTeamForTripAsync(trip);
 
-                let newGroupData: GroupData = {
-                    groupId:  groupId,
-                    tripId: trip.tripId,
-                    tripSnapshot: trip,
-                    creationTime: triggerTime,
-                };
-                await this.appDataStore.addOrUpdateGroupDataAsync(newGroupData);
+                    // Keep track of the teams that we have created
+                    let newGroupData: GroupData = {
+                        groupId:  groupId,
+                        tripId: trip.tripId,
+                        tripSnapshot: trip,
+                        creationTime: triggerTime,
+                    };
+                    await this.appDataStore.addOrUpdateGroupDataAsync(newGroupData);
 
-                winston.info(`Team ${groupId} created for trip ${trip.tripId} departing on ${trip.departureTime.toUTCString()}`);
+                    winston.info(`Team ${groupId} created for trip ${trip.tripId} departing on ${trip.departureTime.toUTCString()}`);
+                }
+            } catch (e) {
+                winston.error(`Error creating team for trip ${trip.tripId}: ${e.message}`, e);
             }
         });
         await Promise.all(teamCreatePromises);
@@ -144,7 +151,7 @@ export class TeamsUpdater
             group = await this.teamsApi.createGroupAsync(displayName, description, trip.tripId);
             winston.info(`Created new group ${group.id}`);
 
-            // If wé're acting in app context, a user owner needs to be added to the group
+            // If we're acting in app context, a user owner needs to be added to the group
             if (this.teamsApi.isInAppContext()) {
                 await Promise.all([
                     this.teamsApi.addOwnerToGroupAsync(group.id, this.activeTeamOwnerId),
@@ -171,10 +178,11 @@ export class TeamsUpdater
         }
         winston.info(`Created a new group ${team.id} for trip ${trip.tripId}`);
 
-        // Wait a few seconds for the team info to propagate
+        // Wait a few seconds for the team information to propagate
         winston.info(`Waiting ${teamCreationDelayInSeconds} seconds`);
         await new Promise((resolve, reject) => {
-            setTimeout(() => { resolve(); }, teamCreationDelayInSeconds * 1000);
+            setTimeout(() => { resolve(); },
+            teamCreationDelayInSeconds * 1000);
         });
 
         // Add team members
@@ -243,6 +251,7 @@ export class TeamsUpdater
                 await Promise.all(memberRemovePromises);
                 winston.info(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
 
+                // Update team info in app database
                 groupData.tripSnapshot = trip;
                 this.appDataStore.addOrUpdateGroupDataAsync(groupData);
             }
@@ -266,8 +275,10 @@ export class TeamsUpdater
         let teamArchivePromises = groupsToArchive.map(async (groupData) => {
             try
             {
+                // Archive team
                 await this.archiveTeamAsync(groupData.groupId);
 
+                // Update team info in app database
                 groupData.archivalTime = triggerTime;
                 await this.appDataStore.addOrUpdateGroupDataAsync(groupData);
             }

@@ -22,7 +22,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import * as config from "config";
-import * as jwt from "jsonwebtoken";
 import * as winston from "winston";
 import * as constants from "./constants";
 import { IAppDataStore } from "./storage/AppDataStore";
