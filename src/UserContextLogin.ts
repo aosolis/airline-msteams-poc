@@ -67,6 +67,7 @@ export class UserContextLogin
 
             // Check that the state matches
             let storedState = await this.appDataStore.getAppDataAsync(constants.AppDataKey.oauthState);
+            await this.appDataStore.setAppDataAsync(constants.AppDataKey.oauthState, null);
             if (storedState !== incomingState) {
                 throw new Error("OAuth state does not match");
             }
