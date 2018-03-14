@@ -55,7 +55,9 @@ const teamSettings: teams.Team = {
 export class TeamsUpdater
 {
     private activeTeamOwnerId: string;
+    private activeTeamOwnerUpn: string;
     private archivedTeamOwnerId: string;
+    private archivedTeamOwnerUpn: string;
 
     constructor(
         private tripsApi: trips.ITripsApi,              // Interface to the trips database
@@ -65,14 +67,23 @@ export class TeamsUpdater
     ) {
         // Get the id of the user that owns all active teams
         this.activeTeamOwnerId = config.get("app.activeTeamOwnerId").toLowerCase();
+        this.activeTeamOwnerUpn = config.get("app.activeTeamOwnerUpn");
 
         // Get the id of the user that owns all "archived" teams
         this.archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
+        this.archivedTeamOwnerUpn = config.get("app.archivedTeamOwnerUpn");
+
+        // We allow for 2 different users here, in case there are scenarios where the active team owner ever has to
+        // log in to Teams, which could be problematic if the user is part of thousands of teams. If both accounts are
+        // treated as service accounts and never actually use Teams, then the active and archive owner accounts
+        // can be the same user.
     }
 
     // Handle a trigger to update teams
     public async updateTeamsAsync(triggerTime: Date): Promise<void> {
         winston.info(`Updating teams based on trigger time ${triggerTime.toUTCString()}`);
+
+        await this.resolveTeamOwnersAsync();
 
         await this.archiveTeamsAsync(triggerTime);
         await this.updateExistingTeamsAsync(triggerTime);
@@ -347,5 +358,17 @@ export class TeamsUpdater
         winston.info(`Removed ${ownerRemovePromises.length} owners from team ${groupId}`);
 
         winston.info(`Finished archiving team ${groupId}`);
+    }
+
+    // Resolve the team owner accounts to their user ids
+    private async resolveTeamOwnersAsync(): Promise<void> {
+        if (!this.activeTeamOwnerId) {
+            let user = await this.appTeamsApi.getUserByUpnAsync(this.activeTeamOwnerUpn);
+            this.activeTeamOwnerId = user.id.toLowerCase();
+        }
+        if (!this.archivedTeamOwnerId) {
+            let user = await this.appTeamsApi.getUserByUpnAsync(this.archivedTeamOwnerUpn);
+            this.archivedTeamOwnerId = user.id.toLowerCase();
+        }
     }
 }

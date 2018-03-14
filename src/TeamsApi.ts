@@ -39,6 +39,12 @@ export interface DirectoryObject {
     id: string;
 }
 
+export interface User {
+    id: string;
+    displayName: string;
+    userPrincipalName: string;
+}
+
 export interface Group {
     id?: string;
     displayName?: string;
@@ -378,6 +384,22 @@ export abstract class TeamsApi {
             },
         };
         await request.patch(options);
+    }
+
+    // Get user information using a UPN
+    // Parameters:
+    //   - upn: user principal name
+    public async getUserByUpnAsync(upn: string): Promise<User> {
+        await this.refreshAccessTokenAsync();
+
+        let options = {
+            url: `${graphBaseUrl}/users/${upn}?$select=id,displayName,userPrincipalName`,
+            json: true,
+            headers: {
+                "Authorization": `Bearer ${this.accessToken}`,
+            },
+        };
+        return await request.get(options) as User;
     }
 
     // Create a team given an existing group
