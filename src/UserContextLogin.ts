@@ -75,13 +75,6 @@ export class UserContextLogin
             // Redeem auth code for a token
             let userToken = await this.oauthProvider.getAccessTokenAsync(authCode, this.replyUrl);
             this.appDataStore.setAppDataAsync(constants.AppDataKey.userToken, userToken);
-
-            // Get user name and render success page
-            const decodedToken = jwt.decode(userToken.idToken, { complete: true });
-            res.render("usercontext-callback-success", {
-                name: decodedToken.payload.name,
-                upn: decodedToken.payload.upn,
-            });
         } catch (e) {
             winston.error(`Error logging in: ${e.message}`, e);
             res.render("oauth-callback-error", {
