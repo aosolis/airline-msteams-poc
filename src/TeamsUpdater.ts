@@ -197,11 +197,13 @@ export class TeamsUpdater
         });
 
         // Add team members
+        this.normalizeUpnCasing(trip.crewMembers);
         let memberAddPromises = trip.crewMembers.map(async crewMember => {
             try {
-                await this.teamsApi.addMemberToGroupAsync(team.id, crewMember.aadObjectId);
+                let user = await this.teamsApi.getUserByUpnAsync(crewMember.userPrincipalName);
+                await this.teamsApi.addMemberToGroupAsync(team.id, user.id);
             } catch (e) {
-                winston.error(`Error adding ${crewMember.staffId} (${crewMember.aadObjectId}): ${e.message}`, e);
+                winston.error(`Error adding ${crewMember.userPrincipalName}: ${e.message}`, e);
             }
         });
         await Promise.all(memberAddPromises);
@@ -229,7 +231,8 @@ export class TeamsUpdater
     private async updateExistingTeamsAsync(triggerTime: Date): Promise<void> {
         // Monitor roster changes for trips departing up to "daysInPastToMonitorTrips" days ago
         let minDepartureTimeToUpdate = moment(triggerTime).subtract(daysInPastToMonitorTrips, "d").toDate();
-        let groupsToUpdate = (await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(triggerTime))
+        let activeGroups = await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(triggerTime);
+        let groupsToUpdate = activeGroups
             .filter(groupData => groupData.tripSnapshot.departureTime > minDepartureTimeToUpdate);
 
         let groupIdsToUpdate = groupsToUpdate.map(groupData => groupData.groupId).join(", ");
@@ -241,30 +244,41 @@ export class TeamsUpdater
                 // Get trip info
                 let groupId = groupData.groupId;
                 let trip = await this.tripsApi.getTripAsync(groupData.tripId);
+                this.normalizeUpnCasing(trip.crewMembers);
 
                 // Get current members of the team
                 let crewMembers = trip.crewMembers;
                 let groupMembers = await this.teamsApi.getMembersOfGroupAsync(groupId);
+                this.normalizeUpnCasing(groupMembers);
 
                 // Add new crew members to group
                 let crewMembersToAdd = crewMembers.filter(crewMember =>
-                    !groupMembers.find(groupMember => groupMember.id === crewMember.aadObjectId));
-                let memberAddPromises = crewMembersToAdd.map(
-                    (crewMember) => this.teamsApi.addMemberToGroupAsync(groupId, crewMember.aadObjectId));
-                await Promise.all(memberAddPromises);
-                winston.info(`Added ${crewMembersToAdd.length} new members to group ${groupId}`);
+                    !groupMembers.find(groupMember => groupMember.userPrincipalName === crewMember.userPrincipalName));
+                if (crewMembersToAdd.length > 0) {
+                    let memberAddPromises = crewMembersToAdd.map(async (crewMember) => {
+                        let user = await this.teamsApi.getUserByUpnAsync(crewMember.userPrincipalName);
+                        await this.teamsApi.addMemberToGroupAsync(groupId, user.id);
+                    });
+                    await Promise.all(memberAddPromises);
+                    winston.info(`Added ${crewMembersToAdd.length} new members to group ${groupId}`);
+                }
 
                 // Remove deleted group members
                 let groupMembersToRemove = groupMembers.filter(groupMember =>
-                    !crewMembers.find(crewMember => groupMember.id === crewMember.aadObjectId));
-                let memberRemovePromises = groupMembersToRemove.map(
-                    (groupMember) => this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id));
-                await Promise.all(memberRemovePromises);
-                winston.info(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
+                    !crewMembers.find(crewMember => groupMember.userPrincipalName === crewMember.userPrincipalName));
+                if (groupMembersToRemove.length > 0) {
+                    let memberRemovePromises = groupMembersToRemove.map(groupMember => {
+                        return this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id);
+                    });
+                    await Promise.all(memberRemovePromises);
+                    winston.info(`Removed ${groupMembersToRemove.length} members from group ${groupId}`);
+                }
 
                 // Update team info in app database
                 groupData.tripSnapshot = trip;
-                this.appDataStore.addOrUpdateGroupDataAsync(groupData);
+                await this.appDataStore.addOrUpdateGroupDataAsync(groupData);
+
+                winston.info(`Synced membership of group ${groupId} with current roster of trip ${trip.tripId}`);
             }
             catch (e) {
                 winston.error(`Error updating group ${groupData.groupId}: ${e.message}`, e);
@@ -277,7 +291,8 @@ export class TeamsUpdater
     private async archiveTeamsAsync(triggerTime: Date): Promise<void> {
         // Archive active teams created for trips that have departed more than "daysInPastToArchiveTrips" ago
         let maxDepartureTimeToArchive = moment(triggerTime).subtract(daysInPastToArchiveTrips, "d").toDate();
-        let groupsToArchive = (await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive))
+        let activeGroups = await this.appDataStore.findActiveGroupsCreatedBeforeTimeAsync(maxDepartureTimeToArchive);
+        let groupsToArchive = activeGroups
             .filter(groupData => groupData.tripSnapshot.departureTime < maxDepartureTimeToArchive);
 
         let groupIdsToArchive = groupsToArchive.map(groupData => groupData.groupId).join(", ");
@@ -287,11 +302,14 @@ export class TeamsUpdater
             try
             {
                 // Archive team
-                await this.archiveTeamAsync(groupData.groupId);
+                let groupId = groupData.groupId;
+                await this.archiveTeamAsync(groupId);
 
                 // Update team info in app database
                 groupData.archivalTime = triggerTime;
                 await this.appDataStore.addOrUpdateGroupDataAsync(groupData);
+
+                winston.info(`Archived group ${groupId}`);
             }
             catch (e) {
                 winston.error(`Error archiving group ${groupData.groupId}: ${e.message}`, e);
@@ -370,5 +388,15 @@ export class TeamsUpdater
             let user = await this.appTeamsApi.getUserByUpnAsync(this.archivedTeamOwnerUpn);
             this.archivedTeamOwnerId = user.id.toLowerCase();
         }
+    }
+
+    // Normalize the casing of the UPN list, so we can compare directly
+    // Note that this mutates the list
+    private normalizeUpnCasing(users: (trips.CrewMember|teams.User)[]): void {
+        users.forEach(user => {
+            if (user.userPrincipalName) {
+                user.userPrincipalName = user.userPrincipalName.toLowerCase();
+            }
+        });
     }
 }

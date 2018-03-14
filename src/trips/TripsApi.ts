@@ -41,7 +41,7 @@ export interface Flight {
 export interface CrewMember {
     staffId: string;
     rosterGrade: string;
-    aadObjectId: string;
+    aadObjectId?: string;
     displayName?: string;
     userPrincipalName?: string;
 }

@@ -139,12 +139,6 @@ const crewMembers: trips.CrewMember[] = [
     },
 ];
 
-// Find a crew member by AAD object ID
-export function findCrewMemberByAadObjectId(aadObjectId: string): trips.CrewMember {
-    aadObjectId = aadObjectId.toLowerCase();
-    return crewMembers.find(member => member.aadObjectId.toLocaleLowerCase() === aadObjectId);
-}
-
 // Find a crew member by UPN
 export function findCrewMemberByUpn(upn: string): trips.CrewMember {
     upn = upn.toLowerCase();

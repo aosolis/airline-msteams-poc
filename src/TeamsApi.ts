@@ -338,7 +338,7 @@ export abstract class TeamsApi {
     // Parameters:
     //   - groupId: team (group) id
     // Returns: list of team members, or an empty list if the team has no members
-    public async getMembersOfGroupAsync(groupId: string): Promise<DirectoryObject[]> {
+    public async getMembersOfGroupAsync(groupId: string): Promise<User[]> {
         await this.refreshAccessTokenAsync();
 
         let options = {
