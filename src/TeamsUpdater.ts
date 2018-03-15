@@ -65,12 +65,10 @@ export class TeamsUpdater
         private appDataStore: IAppDataStore,            // Interface to the app data store
         private appTeamsApi: teams.TeamsApi,            // Interface to the Teams Graph API, using app context
     ) {
-        // Get the id of the user that owns all active teams
-        this.activeTeamOwnerId = config.get("app.activeTeamOwnerId").toLowerCase();
+        // Get the user that owns all active teams
         this.activeTeamOwnerUpn = config.get("app.activeTeamOwnerUpn");
 
-        // Get the id of the user that owns all "archived" teams
-        this.archivedTeamOwnerId = config.get("app.archivedTeamOwnerId").toLowerCase();
+        // Get the user that owns all "archived" teams
         this.archivedTeamOwnerUpn = config.get("app.archivedTeamOwnerUpn");
 
         // We allow for 2 different users here, in case there are scenarios where the active team owner ever has to

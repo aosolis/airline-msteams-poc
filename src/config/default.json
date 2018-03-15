@@ -3,9 +3,7 @@
         "baseUri": "https://example.com",
         "instrumentationKey": "",
         "tenantDomain": "M365x146188.onmicrosoft.com",
-        "activeTeamOwnerId": "",
         "activeTeamOwnerUpn": "TeresaS@M365x146188.onmicrosoft.com",
-        "archivedTeamOwnerId": "",
         "archivedTeamOwnerUpn": "PradeepG@M365x146188.onmicrosoft.com",
         "apiContext": "user",
         "apiKey": "<secret>"
