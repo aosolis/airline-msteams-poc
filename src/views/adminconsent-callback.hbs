@@ -47,8 +47,7 @@
         });
 
         if (queryParams["admin_consent"] === "True") {
-            $("#consentDenied").css({ display: "none" });
-            $("#consentGranted").css({ display: "" });
+            window.location.assign("/test-dashboard");
         } else {
             $("#consentDenied").css({ display: "" });
             $("#consentGranted").css({ display: "none" });
