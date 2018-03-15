@@ -46,7 +46,7 @@ export class TestDashboard
     public async renderDashboard(res: Response): Promise<void> {
         let isUserContext = (config.get("app.apiContext") === "user");
         let locals = {
-            appId: config.get("bot.appId"),
+            appId: config.get("app.appId"),
             tenantDomain: config.get("app.tenantDomain"),
             baseUri: config.get("app.baseUri"),
             updateApiKey: config.get("app.updateApiKey"),

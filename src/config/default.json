@@ -1,5 +1,7 @@
 {
     "app": {
+        "appId": "<app_id>",
+        "appPassword": "<app_password>",
         "baseUri": "https://example.com",
         "instrumentationKey": "",
         "tenantDomain": "M365x146188.onmicrosoft.com",

@@ -58,10 +58,10 @@ app.set("view engine", "hbs");
 
 // Configure API dependencies
 let appDataStore = new storage.MongoDbAppDataStore(config.get("mongoDb.connectionString"));
-let userTeamsApi = new teams.UserContextTeamsApi(appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
-let appTeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantDomain"), config.get("bot.appId"), config.get("bot.appPassword"));
+let userTeamsApi = new teams.UserContextTeamsApi(appDataStore, config.get("app.appId"), config.get("app.appPassword"));
+let appTeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantDomain"), config.get("app.appId"), config.get("app.appPassword"));
 let tripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
-let aadProvider = new providers.AzureADv1Provider(config.get("bot.appId"), config.get("bot.appPassword"));
+let aadProvider = new providers.AzureADv1Provider(config.get("app.appId"), config.get("app.appPassword"));
 
 let teamsApi = (config.get("app.apiContext") === "user") ? userTeamsApi : appTeamsApi;
 let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore, appTeamsApi);
@@ -96,14 +96,14 @@ app.post("/api/updateTeams", async (req, res) => {
 // Tenant admin consent
 app.get("/adminconsent/login", async (req, res) => {
     let tenantDomain = config.get("app.tenantDomain");
-    let appId = config.get("bot.appId");
+    let appId = config.get("app.appId");
     let baseUri = config.get("app.baseUri");
     let endpoint = `https://login.microsoftonline.com/${tenantDomain}/adminconsent?client_id=${appId}&state=12345&redirect_uri=${baseUri}/adminconsent/callback`;
     res.redirect(endpoint);
 });
 app.get("/adminconsent/callback", (req, res) => {
     res.render("adminconsent-callback", {
-        appId: config.get("bot.appId"),
+        appId: config.get("app.appId"),
         baseUri: config.get("app.baseUri"),
     });
 });
