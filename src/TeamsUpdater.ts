@@ -65,16 +65,22 @@ export class TeamsUpdater
         private appDataStore: IAppDataStore,            // Interface to the app data store
         private appTeamsApi: teams.TeamsApi,            // Interface to the Teams Graph API, using app context
     ) {
-        // Get the user that owns all active teams
-        this.activeTeamOwnerUpn = config.get("app.activeTeamOwnerUpn").toLowerCase();
+        // We allow for 2 different users here, in case there are scenarios where the active team owner ever has to
+        // log in to Teams, which could be problematic if the user is part of thousands of teams. If both accounts are
+        // treated as service accounts and never actually use Microsoft Teams, then the active and archive owner accounts
+        // can be the same user.
 
         // Get the user that owns all "archived" teams
         this.archivedTeamOwnerUpn = config.get("app.archivedTeamOwnerUpn").toLowerCase();
 
-        // We allow for 2 different users here, in case there are scenarios where the active team owner ever has to
-        // log in to Teams, which could be problematic if the user is part of thousands of teams. If both accounts are
-        // treated as service accounts and never actually use Teams, then the active and archive owner accounts
-        // can be the same user.
+        // Get the user that owns all active teams
+        try {
+            this.activeTeamOwnerUpn = config.get("app.activeTeamOwnerUpn").toLowerCase();
+        } catch (e) {
+            winston.info("app.activeTeamOwnerUpn not found, falling back to app.archivedTeamOwnerUpn");
+            this.activeTeamOwnerUpn = this.archivedTeamOwnerUpn;
+            // In this case, there will be only 1 team administrator, who will be part of both active and archived teams
+        }
     }
 
     // Handle a trigger to update teams

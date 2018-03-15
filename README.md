@@ -42,9 +42,9 @@ Set the following environment variables:
 * MICROSOFT_APP_PASSWORD: Your app's password
 * MONGODB_CONNECTION_STRING: Your Mongo database connection string (remember to include the database name) 
 * TENANT_DOMAIN: The domain of your tenant, e.g., `M365x263448.onmicrosoft.com`
-* ARCHIVEDTEAM_OWNER_UPN: The UPN of the user that will be the owner of archived teams (must be an admin)
 * API_CONTEXT: Set to either `user` or `app`, for user context or app context, respectively
 * UPDATE_API_KEY: Set to a string secret that controls access to the `/api/updateTeams` endpoint
+* ARCHIVEDTEAM_OWNER_UPN: The UPN of the user that will be the owner of archived teams (must be an admin)
 
 If you are using app context:
 * ACTIVETEAM_OWNER_UPN: The UPN of the user that will set as the owner of active teams (must be an admin if there will be more than 250 teams at a time)
