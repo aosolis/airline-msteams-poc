@@ -36,7 +36,7 @@
     <div>Date: <input id="triggerDate" type="date"></input></div>
     <div>Time: <input style="width: 145" id="triggerTime" type="time" value="00:00"></input></div>
     <div><button onclick="trigger()">Simulate</button></div>
-    <div id="divStatus"></div>
+    <p id="divTriggerStatus"></p>
 
     <!-- Tenant admin consent -->
     <h2>Permissions</h2>
@@ -55,6 +55,13 @@
     {{/if}}
     {{/if}}
 
+    <!-- Test setup commands -->
+    <h2>Test setup commands</h2>
+    <p>Delete all teams created by this app. It's recommended to archive all the teams first, by simulating a time trigger far into the future, before deleting all teams.</p>
+    <button onclick="executeTestCommand('deleteTeams')">Delete created teams</button>
+    <p>Create sample trips that depart on the 15th day of the next 12 months.</p>
+    <button onclick="executeTestCommand('createTrips')">Create trips</button>
+    <p id="divTestStatus"></p>
 
     <script src="https://code.jquery.com/jquery-3.1.1.js" integrity="sha384-VC7EHu0lDzZyFfmjTPJq+DFyIn8TUGAJbEtpXquazFVr00Q/OOx//RjiZ9yU9+9m" crossorigin="anonymous"></script>
     <script type="text/javascript">
@@ -66,7 +73,7 @@
 
             // Trigger the update
             let status = "Simulating update for date " + date.toISOString() + "...";
-            $("#divStatus").text(status);
+            $("#divTriggerStatus").text(status);
             $.ajax({
                 method: "POST",
                 url: window.location.origin + "/api/updateTeams?date=" + dateTime.toISOString(),
@@ -74,11 +81,28 @@
                     request.setRequestHeader("X-Api-Key", $("#apiKey")[0].value);
                 },
                 success: function (date) {
-                    $("#divStatus").text(status + " Done!");
+                    $("#divTriggerStatus").text(status + " Done!");
                 },
                 error: function (xhr, textStatus, errorThrown) {
                     console.log("textStatus: " + textStatus + ", errorThrown:" + errorThrown);
-                    $("#divStatus").text(status + " Error!");
+                    $("#divTriggerStatus").text(status + " Error!");
+                },
+            });
+        }
+
+        function executeTestCommand(command) {
+            // Trigger the update
+            let status = "Running command " + command + "...";
+            $("#divTestStatus").text(status);
+            $.ajax({
+                method: "POST",
+                url: window.location.origin + "/test-dashboard/execute?command=" + command,
+                success: function (date) {
+                    $("#divTestStatus").text(status + " Done!");
+                },
+                error: function (xhr, textStatus, errorThrown) {
+                    console.log("textStatus: " + textStatus + ", errorThrown:" + errorThrown);
+                    $("#divTestStatus").text(status + " Error!");
                 },
             });
         }

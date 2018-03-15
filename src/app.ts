@@ -31,16 +31,15 @@ let path = require("path");
 let logger = require("morgan");
 import * as config from "config";
 import * as msteams from "botbuilder-teams";
-import * as jwt from "jsonwebtoken";
 import * as moment from "moment";
 import * as winston from "winston";
-import * as constants from "./constants";
 import * as storage from "./storage";
 import * as providers from "./providers";
 import * as teams from "./TeamsApi";
 import { EmiratesBot } from "./EmiratesBot";
 import { MongoDbTripsApi } from "./trips/MongoDbTripsApi";
 import { TeamsUpdater } from "./TeamsUpdater";
+import { TestDashboard } from "./TestDashboard";
 import { UserContextLogin } from "./UserContextLogin";
 
 let app = express();
@@ -111,26 +110,12 @@ app.get("/usercontext/callback", async (req, res) => {
 });
 
 // Test dashboard
+let testDashboard = new TestDashboard(tripsApi, appDataStore, teamsUpdater);
 app.get("/test-dashboard", async (req, res) => {
-    let isUserContext = (config.get("app.apiContext") === "user");
-    let renderContext = {
-        appId: config.get("bot.appId"),
-        tenantDomain: config.get("app.tenantDomain"),
-        baseUri: config.get("app.baseUri"),
-        isUserContext: isUserContext,
-    };
-
-    // Get additional info for user context
-    if (isUserContext) {
-        let userToken = await appDataStore.getAppDataAsync(constants.AppDataKey.userToken);
-        if (userToken && userToken.idToken) {
-            let decodedToken = jwt.decode(userToken.idToken, { complete: true });
-            renderContext["name"] = decodedToken.payload.name;
-            renderContext["upn"] = decodedToken.payload.upn;
-        }
-    }
-
-    res.render("test-dashboard", renderContext);
+    await testDashboard.renderDashboard(res);
+});
+app.post("/test-dashboard/execute", async (req, res) => {
+    await testDashboard.handleCommand(req, res);
 });
 
 // Create bot
