@@ -92,7 +92,14 @@ app.post("/api/updateTeams", async (req, res) => {
     }
 });
 
-// Admin consent callback
+// Tenant admin consent
+app.get("/adminconsent/login", async (req, res) => {
+    let tenantDomain = config.get("app.tenantDomain");
+    let appId = config.get("bot.appId");
+    let baseUri = config.get("app.baseUri");
+    let endpoint = `https://login.microsoftonline.com/${tenantDomain}/adminconsent?client_id=${appId}&state=12345&redirect_uri=${baseUri}/adminconsent/callback`;
+    res.redirect(endpoint);
+});
 app.get("/adminconsent/callback", (req, res) => {
     res.render("adminconsent-callback", {
         appId: config.get("bot.appId"),

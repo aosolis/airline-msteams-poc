@@ -41,30 +41,31 @@
     <!-- Tenant admin consent -->
     <h2>Permissions</h2>
     <p>To manage teams, this app requires permissions that requires tenant administrator consent.</p>
-    <p><a target="_blank" href="https://login.microsoftonline.com/{{tenantDomain}}/adminconsent?client_id={{appId}}&state=12345&redirect_uri={{baseUri}}/adminconsent/callback">Grant admin consent</a></p>
+    <button onclick="getAdminConsent()">Grant admin consent</button>
 
     <!-- User context information -->
     {{#if isUserContext}}
     <h2>User context</h2>
     {{#if name}}
     <p>The app will manage teams as {{name}} ({{upn}}).</p>
-    <p><a href="/usercontext/login">Change user</a></p>
+    <button onclick="setUserContext()">Change user</button>
     {{else}}
     <p>Click on the link below and login as the user whose identity the app will use to manage teams.</p>
-    <p><a href="/usercontext/login">Set user</a></p>
+    <button onclick="setUserContext()">Set user</button>
     {{/if}}
     {{/if}}
 
     <!-- Test setup commands -->
     <h2>Test setup commands</h2>
     <p>Delete all teams created by this app. It's recommended to archive all the teams first, by simulating a time trigger far into the future, before deleting all teams.</p>
-    <button onclick="executeTestCommand('deleteTeams')">Delete created teams</button>
-    <p>Create sample trips that depart on the 15th day of the next 12 months.</p>
-    <button onclick="executeTestCommand('createTrips')">Create trips</button>
+    <button onclick="executeTestCommand('deleteTeams', 'delete created teams')">Delete created teams</button>
+    <p>Re-create sample trips that depart on the 15th day of the next 12 months.</p>
+    <button onclick="executeTestCommand('createTrips', 'create trips')">Create trips</button>
     <p id="divTestStatus"></p>
 
     <script src="https://code.jquery.com/jquery-3.1.1.js" integrity="sha384-VC7EHu0lDzZyFfmjTPJq+DFyIn8TUGAJbEtpXquazFVr00Q/OOx//RjiZ9yU9+9m" crossorigin="anonymous"></script>
     <script type="text/javascript">
+        // Trigger an update for a given date and time
         function trigger() {
             // Construct the trigger date and time
             let date = $("#triggerDate")[0].valueAsDate;
@@ -91,9 +92,20 @@
             });
         }
 
-        function executeTestCommand(command) {
+        // Start admin consent flow
+        function getAdminConsent() {
+            window.location.assign("/adminconsent/login");
+        }
+
+        // Set the user to be used by the app in user context
+        function setUserContext() {
+            window.location.assign("/usercontext/login");
+        }
+
+        // Execute a test command
+        function executeTestCommand(command, description) {
             // Trigger the update
-            let status = "Running command " + command + "...";
+            let status = "Running command to " + description + "...";
             $("#divTestStatus").text(status);
             $.ajax({
                 method: "POST",
