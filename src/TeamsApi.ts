@@ -490,7 +490,7 @@ export class UserContextTeamsApi extends TeamsApi {
 export class AppContextTeamsApi extends TeamsApi {
 
     constructor(
-        private tenantId: string,
+        private tenantDomain: string,
         private appId: string,
         private appPassword: string,
     )
@@ -509,7 +509,7 @@ export class AppContextTeamsApi extends TeamsApi {
         }
 
         // Get an access token using the client_credentials grant
-        const accessTokenUrl = `https://login.microsoftonline.com/${this.tenantId}/oauth2/v2.0/token`;
+        const accessTokenUrl = `https://login.microsoftonline.com/${this.tenantDomain}/oauth2/v2.0/token`;
         let params = {
             grant_type: "client_credentials",
             client_id: this.appId,

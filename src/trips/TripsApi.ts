@@ -39,11 +39,8 @@ export interface Flight {
 }
 
 export interface CrewMember {
-    staffId: string;
-    rosterGrade: string;
-    aadObjectId?: string;
+    userPrincipalName: string;
     displayName?: string;
-    userPrincipalName?: string;
 }
 
 // Interface to the trip database

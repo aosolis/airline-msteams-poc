@@ -41,7 +41,7 @@
     <!-- Tenant admin consent -->
     <h2>Permissions</h2>
     <p>To manage teams, this app requires permissions that requires tenant administrator consent.</p>
-    <p><a href="https://login.microsoftonline.com/common/adminconsent?client_id={{appId}}&state=12345&redirect_uri={{baseUri}}/adminconsent/callback">Grant admin consent</a></p>
+    <p><a target="_blank" href="https://login.microsoftonline.com/{{tenantDomain}}/adminconsent?client_id={{appId}}&state=12345&redirect_uri={{baseUri}}/adminconsent/callback">Grant admin consent</a></p>
 
     <!-- User context information -->
     {{#if isUserContext}}

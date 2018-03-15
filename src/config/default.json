@@ -2,7 +2,7 @@
     "app": {
         "baseUri": "https://example.com",
         "instrumentationKey": "",
-        "tenantId": "a5bbb9df-06cc-47f4-8f24-981a2024b94c",
+        "tenantDomain": "M365x146188.onmicrosoft.com",
         "activeTeamOwnerId": "",
         "activeTeamOwnerUpn": "TeresaS@M365x146188.onmicrosoft.com",
         "archivedTeamOwnerId": "",

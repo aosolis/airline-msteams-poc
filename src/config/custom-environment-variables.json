@@ -2,7 +2,7 @@
     "app": {
         "baseUri": "BASE_URI",
         "instrumentationKey": "APPINSIGHTS_INSTRUMENTATIONKEY",
-        "tenantId": "TENANT_ID",
+        "tenantDomain": "TENANT_DOMAIN",
         "activeTeamOwnerId": "ACTIVETEAM_OWNER_ID",
         "activeTeamOwnerUpn": "ACTIVETEAM_OWNER_UPN",
         "archivedTeamOwnerId": "ARCHIVEDTEAM_OWNER_ID",

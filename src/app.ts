@@ -60,7 +60,7 @@ app.set("view engine", "hbs");
 // Configure API dependencies
 let appDataStore = new storage.MongoDbAppDataStore(config.get("mongoDb.connectionString"));
 let userTeamsApi = new teams.UserContextTeamsApi(appDataStore, config.get("bot.appId"), config.get("bot.appPassword"));
-let appTeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantId"), config.get("bot.appId"), config.get("bot.appPassword"));
+let appTeamsApi = new teams.AppContextTeamsApi(config.get("app.tenantDomain"), config.get("bot.appId"), config.get("bot.appPassword"));
 let tripsApi = new MongoDbTripsApi(config.get("mongoDb.connectionString"));
 let aadProvider = new providers.AzureADv1Provider(config.get("bot.appId"), config.get("bot.appPassword"));
 
@@ -115,6 +115,7 @@ app.get("/test-dashboard", async (req, res) => {
     let isUserContext = (config.get("app.apiContext") === "user");
     let renderContext = {
         appId: config.get("bot.appId"),
+        tenantDomain: config.get("app.tenantDomain"),
         baseUri: config.get("app.baseUri"),
         isUserContext: isUserContext,
     };

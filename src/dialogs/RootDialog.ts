@@ -123,7 +123,7 @@ export class RootDialog extends builder.IntentDialog {
         }
 
         let message = `${this.getDisplayNameForTrip(trip)}<br/>\nRoster:<ol>\n` +
-            trip.crewMembers.map(m => `<li>${m.displayName} (${m.userPrincipalName}) ${m.rosterGrade}</li>`).join("\n") +
+            trip.crewMembers.map(m => `<li>${m.displayName} (${m.userPrincipalName})</li>`).join("\n") +
             `\n</ol>`;
         session.send(message);
     }
@@ -186,13 +186,14 @@ export class RootDialog extends builder.IntentDialog {
 
         switch (command) {
             case "add":
-                trip.crewMembers = _(trip.crewMembers).push(crewMember).uniqBy("aadObjectId").value();
+                trip.crewMembers = _(trip.crewMembers).push(crewMember).uniqBy("userPrincipalName").value();
                 await testTripsApi.addOrUpdateTripAsync(trip);
                 session.send(`Added ${crewMember.displayName} to the trip roster for ${tripName}.`);
                 break;
 
             case "remove":
-                trip.crewMembers = trip.crewMembers.filter(member => member.aadObjectId !== crewMember.aadObjectId);
+                trip.crewMembers = trip.crewMembers.filter(member =>
+                    member.userPrincipalName.toLowerCase() !== crewMember.userPrincipalName.toLowerCase());
                 await testTripsApi.addOrUpdateTripAsync(trip);
                 session.send(`Removed ${crewMember.displayName} from the trip roster for ${tripName}.`);
                 break;
