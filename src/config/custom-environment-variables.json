@@ -6,7 +6,7 @@
         "activeTeamOwnerUpn": "ACTIVETEAM_OWNER_UPN",
         "archivedTeamOwnerUpn": "ARCHIVEDTEAM_OWNER_UPN",
         "apiContext": "API_CONTEXT",
-        "apiKey": "API_KEY"
+        "updateApiKey": "UPDATE_API_KEY"
     },
     "bot": {
         "appId": "MICROSOFT_APP_ID",

@@ -49,7 +49,7 @@ export class TestDashboard
             appId: config.get("bot.appId"),
             tenantDomain: config.get("app.tenantDomain"),
             baseUri: config.get("app.baseUri"),
-            apiKey: config.get("app.apiKey"),
+            updateApiKey: config.get("app.updateApiKey"),
             isUserContext: isUserContext,
         };
 

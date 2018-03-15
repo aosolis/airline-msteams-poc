@@ -6,7 +6,7 @@
         "activeTeamOwnerUpn": "TeresaS@M365x146188.onmicrosoft.com",
         "archivedTeamOwnerUpn": "PradeepG@M365x146188.onmicrosoft.com",
         "apiContext": "user",
-        "apiKey": "<secret>"
+        "updateApiKey": "<secret>"
     },
     "bot": {
         "appId": "<app_id>",

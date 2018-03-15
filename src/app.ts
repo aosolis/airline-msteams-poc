@@ -67,10 +67,11 @@ let teamsApi = (config.get("app.apiContext") === "user") ? userTeamsApi : appTea
 let teamsUpdater = new TeamsUpdater(tripsApi, teamsApi, appDataStore, appTeamsApi);
 
 // Update teams
-let apiKey = config.get("app.apiKey");
+let updateApiKey = config.get("app.updateApiKey");
 app.post("/api/updateTeams", async (req, res) => {
+    // This is a simple access control mechanism to prevent unauthorized users from triggering updates
     let apiKeyHeader = req.headers["x-api-key"];
-    if (apiKeyHeader !== apiKey) {
+    if (apiKeyHeader !== updateApiKey) {
         winston.error("Invalid api key");
         res.sendStatus(401);
         return;
@@ -88,7 +89,7 @@ app.post("/api/updateTeams", async (req, res) => {
         res.status(200).send(date.toUTCString());
     } catch (e) {
         winston.error("Update teams failed", e);
-        res.sendStatus(500);
+        res.status(500, e);
     }
 });
 

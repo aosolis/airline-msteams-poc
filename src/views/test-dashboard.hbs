@@ -79,7 +79,7 @@
                 method: "POST",
                 url: window.location.origin + "/api/updateTeams?date=" + date.toISOString(),
                 beforeSend: function(request) {
-                    request.setRequestHeader("X-Api-Key", "{{apiKey}}");
+                    request.setRequestHeader("X-Api-Key", "{{updateApiKey}}");
                 },
                 success: function (data) {
                     $("#divTriggerStatus").text(status + " Done!");

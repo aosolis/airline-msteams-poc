@@ -44,7 +44,7 @@ Set the following environment variables:
 * TENANT_DOMAIN: The domain of your tenant, e.g., `M365x263448.onmicrosoft.com`
 * ARCHIVEDTEAM_OWNER_UPN: The UPN of the user that will be the owner of archived teams (must be an admin)
 * API_CONTEXT: Set to either `user` or `app`, for user context or app context, respectively
-* API_KEY: Set to a secret string
+* UPDATE_API_KEY: Set to a string secret that controls access to the `/api/updateTeams` endpoint
 
 If you are using app context:
 * ACTIVETEAM_OWNER_UPN: The UPN of the user that will set as the owner of active teams (must be an admin if there will be more than 250 teams at a time)
@@ -59,7 +59,7 @@ For example, if you're using Visual Studio Code, you would add the section to yo
         "TENANT_DOMAIN": "M365x263448.onmicrosoft.com",
         "ACTIVETEAM_OWNER_UPN": "TeresaS@M365x263448.onmicrosoft.com",
         "ARCHIVEDTEAM_OWNER_UPN": "PradeepG@M365x263448.onmicrosoft.com",
-        "API_KEY": "<secret>",
+        "UPDATE_API_KEY": "<secret>",
         "API_CONTEXT": "user",
     }
 ```
