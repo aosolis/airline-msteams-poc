@@ -212,9 +212,13 @@ export class MongoDbBotStorage implements IBotExtendedStorage {
         if (!this.mongoDb) {
             try {
                 this.mongoDb = await mongodb.MongoClient.connect(this.connectionString);
-                this.botStateCollection = await this.mongoDb.collection(this.collectionName);
 
-                // Set up indexes
+                try {
+                    this.botStateCollection = await this.mongoDb.collection(this.collectionName);
+                } catch (e) {
+                    this.botStateCollection = await this.mongoDb.createCollection(this.collectionName);
+                }
+
                 await this.botStateCollection.createIndex({ key: 1 });
                 await this.botStateCollection.createIndex({ lastUpdate: 1 });
             } catch (e) {

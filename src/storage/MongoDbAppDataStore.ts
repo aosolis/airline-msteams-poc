@@ -139,13 +139,25 @@ export class MongoDbAppDataStore implements IAppDataStore {
         if (!this.mongoDb) {
             try {
                 this.mongoDb = await mongodb.MongoClient.connect(this.connectionString);
-                this.teamsCollection = await this.mongoDb.collection(teamsCollectionName);
-                this.appDataCollection = await this.mongoDb.collection(appDataCollectionName);
 
-                // Set up indexes
+                // Set up teams collection
+                try {
+                    this.teamsCollection = await this.mongoDb.collection(teamsCollectionName);
+                } catch (e) {
+                    this.teamsCollection = await this.mongoDb.createCollection(teamsCollectionName);
+                }
+
                 await this.teamsCollection.createIndex({ tripId: 1 });
                 await this.teamsCollection.createIndex({ groupId: 1 });
                 await this.teamsCollection.createIndex({ creationTime: 1 });
+
+                // Set up app data collection
+                try {
+                    this.appDataCollection = await this.mongoDb.collection(appDataCollectionName);
+                } catch (e) {
+                    this.appDataCollection = await this.mongoDb.createCollection(appDataCollectionName);
+                }
+
                 await this.appDataCollection.createIndex({ key: 1 });
             } catch (e) {
                 winston.error(`Error initializing MongoDB: ${e.message}`, e);
@@ -158,6 +170,7 @@ export class MongoDbAppDataStore implements IAppDataStore {
     // Close the connection to the database
     private close(): void {
         this.teamsCollection = null;
+        this.appDataCollection = null;
         if (this.mongoDb) {
             this.mongoDb.close();
             this.mongoDb = null;

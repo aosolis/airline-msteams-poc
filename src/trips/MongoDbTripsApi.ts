@@ -92,9 +92,13 @@ export class MongoDbTripsApi implements trips.ITripsApi, trips.ITripsTest {
         if (!this.mongoDb) {
             try {
                 this.mongoDb = await mongodb.MongoClient.connect(this.connectionString);
-                this.tripsCollection = await this.mongoDb.collection(tripsCollectionName);
 
-                // Set up indexes
+                try {
+                    this.tripsCollection = await this.mongoDb.collection(tripsCollectionName);
+                } catch (e) {
+                    this.tripsCollection = await this.mongoDb.createCollection(tripsCollectionName);
+                }
+
                 await this.tripsCollection.createIndex({ tripId: 1 });
                 await this.tripsCollection.createIndex({ lastUpdate: 1 });
             } catch (e) {
