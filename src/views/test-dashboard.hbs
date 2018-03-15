@@ -32,7 +32,6 @@
     <h2>Simulate time trigger</h2>
     <p>Enter the API key and trigger date and time, then press "Simulate".</p>
     <p/>
-    <div>Api key: <input style="width: 600" id="apiKey" type="text"></input></div>
     <div>Date: <input id="triggerDate" type="date"></input></div>
     <div>Time: <input style="width: 145" id="triggerTime" type="time" value="00:00"></input></div>
     <div><button onclick="trigger()">Simulate</button></div>
@@ -80,7 +79,7 @@
                 method: "POST",
                 url: window.location.origin + "/api/updateTeams?date=" + date.toISOString(),
                 beforeSend: function(request) {
-                    request.setRequestHeader("X-Api-Key", $("#apiKey")[0].value);
+                    request.setRequestHeader("X-Api-Key", "{{apiKey}}");
                 },
                 success: function (data) {
                     $("#divTriggerStatus").text(status + " Done!");
