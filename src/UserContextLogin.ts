@@ -74,6 +74,9 @@ export class UserContextLogin
             // Redeem auth code for a token
             let userToken = await this.oauthProvider.getAccessTokenAsync(authCode, this.replyUrl);
             this.appDataStore.setAppDataAsync(constants.AppDataKey.userToken, userToken);
+
+            // Redirect the user to the test dashboard
+            res.redirect("/test-dashboard");
         } catch (e) {
             winston.error(`Error logging in: ${e.message}`, e);
             res.render("oauth-callback-error", {
