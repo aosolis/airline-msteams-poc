@@ -5,6 +5,7 @@
         "tenantDomain": "TENANT_DOMAIN",
         "activeTeamOwnerUpn": "ACTIVETEAM_OWNER_UPN",
         "archivedTeamOwnerUpn": "ARCHIVEDTEAM_OWNER_UPN",
+        "apiContext": "API_CONTEXT",
         "apiKey": "API_KEY"
     },
     "bot": {
