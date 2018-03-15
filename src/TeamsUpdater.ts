@@ -66,10 +66,10 @@ export class TeamsUpdater
         private appTeamsApi: teams.TeamsApi,            // Interface to the Teams Graph API, using app context
     ) {
         // Get the user that owns all active teams
-        this.activeTeamOwnerUpn = config.get("app.activeTeamOwnerUpn");
+        this.activeTeamOwnerUpn = config.get("app.activeTeamOwnerUpn").toLowerCase();
 
         // Get the user that owns all "archived" teams
-        this.archivedTeamOwnerUpn = config.get("app.archivedTeamOwnerUpn");
+        this.archivedTeamOwnerUpn = config.get("app.archivedTeamOwnerUpn").toLowerCase();
 
         // We allow for 2 different users here, in case there are scenarios where the active team owner ever has to
         // log in to Teams, which could be problematic if the user is part of thousands of teams. If both accounts are
@@ -263,7 +263,8 @@ export class TeamsUpdater
 
                 // Remove deleted group members
                 let groupMembersToRemove = groupMembers.filter(groupMember =>
-                    !crewMembers.find(crewMember => groupMember.userPrincipalName === crewMember.userPrincipalName));
+                    !crewMembers.find(crewMember => groupMember.userPrincipalName === crewMember.userPrincipalName) &&
+                    (groupMember.userPrincipalName !== this.activeTeamOwnerUpn));
                 if (groupMembersToRemove.length > 0) {
                     let memberRemovePromises = groupMembersToRemove.map(groupMember => {
                         return this.teamsApi.removeMemberFromGroupAsync(groupId, groupMember.id);

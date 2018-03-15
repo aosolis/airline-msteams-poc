@@ -69,18 +69,19 @@
             // Construct the trigger date and time
             let date = $("#triggerDate")[0].valueAsDate;
             let time = $("#triggerTime")[0].valueAsDate;
-            let dateTime = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate(), time.getHours(), time.getMinutes()));
+            date.setUTCHours(time.getUTCHours());
+            date.setUTCMinutes(time.getUTCMinutes());
 
             // Trigger the update
             let status = "Simulating update for date " + date.toISOString() + "...";
             $("#divTriggerStatus").text(status);
             $.ajax({
                 method: "POST",
-                url: window.location.origin + "/api/updateTeams?date=" + dateTime.toISOString(),
+                url: window.location.origin + "/api/updateTeams?date=" + date.toISOString(),
                 beforeSend: function(request) {
                     request.setRequestHeader("X-Api-Key", $("#apiKey")[0].value);
                 },
-                success: function (date) {
+                success: function (data) {
                     $("#divTriggerStatus").text(status + " Done!");
                 },
                 error: function (xhr, textStatus, errorThrown) {
@@ -97,7 +98,7 @@
             $.ajax({
                 method: "POST",
                 url: window.location.origin + "/test-dashboard/execute?command=" + command,
-                success: function (date) {
+                success: function (data) {
                     $("#divTestStatus").text(status + " Done!");
                 },
                 error: function (xhr, textStatus, errorThrown) {
