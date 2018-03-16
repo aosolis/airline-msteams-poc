@@ -69,6 +69,8 @@ Most of these are straightforward member management operations. The only tricky 
 3. If the operation ultimately fails, remember to [delete the group](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsApi.ts#L187) so that it is not left in an orphaned state.
 4. There's a similar issue when adding members to a team right after it is created. The app works around this problem by [waiting for a few seconds before adding members to a team](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L196). Without this delay, the members are added to the group successfully, but will not be visible in the team for several hours.
 
+Team membership operations require the user's AAD object ID, but the trip database contains the user principal name (e.g., AdeleV@microsoft.com). To get the object ID from the UPN, the app uses the [Get user API](https://developer.microsoft.com/en-us/graph/docs/api-reference/v1.0/api/user_get) from Microsoft Graph.
+
 ## Setting up the application
 
 ### Database
@@ -192,3 +194,5 @@ Microsoft Graph has APIs to [manage groups](https://developer.microsoft.com/en-u
 * Team
     * [Create team](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/team_put_teams)
     * [Get team](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/team_get)
+* User
+    * [Get user](https://developer.microsoft.com/en-us/graph/docs/api-reference/v1.0/api/user_get)
