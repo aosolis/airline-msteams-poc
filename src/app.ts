@@ -30,13 +30,11 @@ let http = require("http");
 let path = require("path");
 let logger = require("morgan");
 import * as config from "config";
-import * as msteams from "botbuilder-teams";
 import * as moment from "moment";
 import * as winston from "winston";
 import * as storage from "./storage";
 import * as providers from "./providers";
 import * as teams from "./TeamsApi";
-import { EmiratesBot } from "./EmiratesBot";
 import { MongoDbTripsApi } from "./trips/MongoDbTripsApi";
 import { TeamsUpdater } from "./TeamsUpdater";
 import { TestDashboard } from "./TestDashboard";
@@ -124,31 +122,6 @@ app.get("/test-dashboard", async (req, res) => {
 });
 app.post("/test-dashboard/execute", async (req, res) => {
     await testDashboard.handleCommand(req, res);
-});
-
-// Create bot
-let connector = new msteams.TeamsChatConnector({
-    appId: config.get("bot.appId"),
-    appPassword: config.get("bot.appPassword"),
-});
-let botSettings = {
-    storage: new storage.MongoDbBotStorage(config.get("mongoDb.botStateCollection"), config.get("mongoDb.connectionString")),
-    azureADv1: aadProvider,
-    appDataStore: appDataStore,
-    tripsApi: tripsApi,
-    teamsUpdater: teamsUpdater,
-};
-let bot = new EmiratesBot(connector, botSettings, app);
-
-// Log bot errors
-bot.on("error", (error: Error) => {
-    winston.error(error.message, error);
-});
-
-// Bot routes
-app.post("/api/messages", connector.listen());
-app.get("/auth/azureADv1/callback", (req, res) => {
-    bot.handleOAuthCallback(req, res, "azureADv1");
 });
 
 // Ping route
