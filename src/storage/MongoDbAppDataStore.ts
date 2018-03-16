@@ -23,7 +23,7 @@
 
 import * as mongodb from "mongodb";
 import * as winston from "winston";
-import { GroupData, IAppDataStore } from "./AppDataStore";
+import { TeamData, IAppDataStore } from "./AppDataStore";
 
 const teamsCollectionName = "Teams";
 const appDataCollectionName = "AppData";
@@ -39,39 +39,39 @@ export class MongoDbAppDataStore implements IAppDataStore {
         private connectionString: string) {
     }
 
-    public async addOrUpdateGroupDataAsync(groupData: GroupData): Promise<void> {
+    public async addOrUpdateTeamDataAsync(teamData: TeamData): Promise<void> {
         await this.initialize();
 
-        if (!groupData.creationTime) {
-            groupData.creationTime = new Date();
+        if (!teamData.creationTime) {
+            teamData.creationTime = new Date();
         }
 
-        let filter = { groupId: groupData.groupId };
-        await this.teamsCollection.updateOne(filter, groupData, { upsert: true });
+        let filter = { groupId: teamData.groupId };
+        await this.teamsCollection.updateOne(filter, teamData, { upsert: true });
     }
 
-    public async deleteGroupDataAsync(groupId: string): Promise<void> {
+    public async deleteTeamDataAsync(groupId: string): Promise<void> {
         await this.initialize();
 
         let filter = { groupId: groupId };
         return await this.teamsCollection.remove(filter);
     }
 
-    public async getGroupDataByGroupAsync(groupId: string): Promise<GroupData> {
+    public async getTeamDataByGroupAsync(groupId: string): Promise<TeamData> {
         await this.initialize();
 
         let filter = { groupId: groupId };
         return await this.teamsCollection.findOne(filter);
     }
 
-    public async getGroupDataByTripAsync(tripId: string): Promise<GroupData> {
+    public async getTeamDataByTripAsync(tripId: string): Promise<TeamData> {
         await this.initialize();
 
         let filter = { tripId: tripId };
         return await this.teamsCollection.findOne(filter);
     }
 
-    public async findActiveGroupsCreatedBeforeTimeAsync(endTime: Date): Promise<GroupData[]> {
+    public async findActiveTeamsCreatedBeforeTimeAsync(endTime: Date): Promise<TeamData[]> {
         await this.initialize();
 
         let filter = {
@@ -82,7 +82,7 @@ export class MongoDbAppDataStore implements IAppDataStore {
                 "$exists": false,
             },
         };
-        return await new Promise<GroupData[]>((resolve, reject) => {
+        return await new Promise<TeamData[]>((resolve, reject) => {
             this.teamsCollection.find(filter).toArray((error, documents) => {
                 if (error) {
                     reject(error);
@@ -93,10 +93,10 @@ export class MongoDbAppDataStore implements IAppDataStore {
         });
     }
 
-    public async getAllGroupsAsync(): Promise<GroupData[]> {
+    public async getAllTeamsAsync(): Promise<TeamData[]> {
         await this.initialize();
 
-        return await new Promise<GroupData[]>((resolve, reject) => {
+        return await new Promise<TeamData[]>((resolve, reject) => {
             this.teamsCollection.find({}).toArray((error, documents) => {
                 if (error) {
                     reject(error);

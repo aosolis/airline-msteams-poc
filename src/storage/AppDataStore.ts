@@ -27,7 +27,7 @@ import * as trips from "../trips/TripsApi";
 // Application data storage
 // =========================================================
 
-export interface GroupData {
+export interface TeamData {
     groupId: string;
     tripId: string;
     creationTime: Date;
@@ -38,22 +38,22 @@ export interface GroupData {
 // Interface to app data store, which tracks info about teams and general app data
 export interface IAppDataStore {
     // Add or update info about a team that app created
-    addOrUpdateGroupDataAsync(groupData: GroupData): Promise<void>;
+    addOrUpdateTeamDataAsync(teamData: TeamData): Promise<void>;
 
     // Delete info about a team that app created
-    deleteGroupDataAsync(groupId: string): Promise<void>;
+    deleteTeamDataAsync(groupId: string): Promise<void>;
 
     // Find team info given a group (team) id
-    getGroupDataByGroupAsync(groupId: string): Promise<GroupData>;
+    getTeamDataByGroupAsync(groupId: string): Promise<TeamData>;
 
     // Find team info given a trip id
-    getGroupDataByTripAsync(tripId: string): Promise<GroupData>;
+    getTeamDataByTripAsync(tripId: string): Promise<TeamData>;
 
-    // Find active (not archived) teans that were created before the given time
-    findActiveGroupsCreatedBeforeTimeAsync(endTime: Date): Promise<GroupData[]>;
+    // Find active (not archived) teams that were created before the given time
+    findActiveTeamsCreatedBeforeTimeAsync(endTime: Date): Promise<TeamData[]>;
 
-    // Find teans that were created by this app
-    getAllGroupsAsync(): Promise<GroupData[]>;
+    // Find teams that were created by this app
+    getAllTeamsAsync(): Promise<TeamData[]>;
 
     // Get app metadata
     getAppDataAsync(key: string): Promise<any>;
