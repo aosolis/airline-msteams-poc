@@ -1,6 +1,69 @@
 # emirates-msteams-poc
 
-## Setup
+## How it works
+This demonstrates how to use [Microsoft Graph](https://developer.microsoft.com/en-us/graph/docs/concepts/overview) APIs to automatically provision and retire teams, in the context of an airline operations scenario.
+
+### Problem statement
+An airline has a set of cabin crew members that leave together on a trip, with the same group of people staying together throughout a trip. (A trip is comprised of multiple flight segments.) To facilitate collaboration between these staff members, we want to:
+* automatically provision a team for the trip several days before the trip departs
+* keep the team membership synced with the cabin crew roster while the trip is active
+* at the end of the trip, remove all the team members
+* keep the team contents accessible for later analysis
+
+### Solution
+
+#### Data model
+A `Trip` has a unique `tripId` and a `departureTime`. It is comprised of a list of `Flight` segments, each of which has a `flightNumber`, `origin` airport and `destination` airport. The trip also has a list of `CrewMember` entities, which are uniquely identified by their `userPrincipalName`.
+
+Assume that the airline trip database has an interface that supports the following operations:
+* `getTripAsync(tripId: string): Promise<Trip>`
+    * Get the details of a trip, given its trip id
+* `findTripsDepartingInRangeAsync(startTime: Date, endTime: Date): Promise<Trip[]>`
+    * Find all trips departing between `startTime` and `endTime` (inclusive) 
+
+To keep track of the teams that the app has created, and the status of each team, the app maintains data for each team. `TeamData` has a `groupId`, `tripId`, `creationTime`,  `archivalTime` (not set if the team is active), and a snapshot of the trip details in `tripSnapshot`. The app keeps this in an additional store that supports the following operations:
+* `addOrUpdateTeamDataAsync(teamData: TeamData)`
+    * Add or update info about a team that app created
+* `deleteTeamDataAsync(groupId: string)`
+    * Delete info about a team that app created
+* `getTeamDataByGroupAsync(groupId: string): Promise<TeamData>`
+    * Get team info given a group (team) id
+* `getTeamDataByTripAsync(tripId: string): Promise<TeamData>`
+    * Get  team info given a trip id
+* `findActiveTeamsCreatedBeforeTimeAsync(endTime: Date): Promise<TeamData[]>`
+    * Find active (not archived) teams that were created before `endTime`
+* `getAllTeamsAsync(): Promise<TeamData[]>`
+    * Get all the teams that were created by this app
+
+#### Core logic
+At a periodic interval (e.g., 1 hour), depending on business needs, the app runs through the following steps to create and update teams:
+1. Archive old teams:
+    1. Get all active teams.
+    2. Determine the teams that correspond to trips that have departed more than 14 days ago.
+    3. "Archive" each team. Microsoft Teams doesn't yet support true archive functionality, so instead:
+        1. Remove all members from the team.
+        2. Rename the team to add an "[ARCHIVED]" tag.
+        3. Change the owner to an be "archive owner" user. This archive owner must be an administrator, as normal users are limited to being an owner/member of up to 250 groups only.
+        4. Mark the team as "archived" in the app data store.
+2. Update active teams:
+    1. Get all active teams.
+    2. Determine the teams that correspond to trips that haven't left yet, or have left up to 14 days ago.
+    3. For each team, synchronize the team membership with the current crew roster:
+        1. Get the current trip details.
+        2. Get the current team members.
+        3. Remove all users that are team members, but no longer in the cabin crew roster.
+        4. Add users that are in the cabin crew roster, but are not members of the team.
+        5. Update the trip snapshot in the app data store.
+3. Create new teams:
+    1. Get all trips departing within the next 7 days.
+    3. For each trip, create a team if we don't have one yet:
+        1. Check if we have already created a team for this trip, if so, skip this team (we would have updated it in step #2).
+        2. Get the current trip details.
+        3. Create a team for the trip. Set the team name and description based on the trip details.
+        4. Add users that are in the cabin crew roster.
+        5. Update the team information in the app data store.
+
+## Setting up the application
 
 ### Database
 This sample uses a Mongo database to:
@@ -81,39 +144,45 @@ For example, if you're using Visual Studio Code, you would add the section to yo
 3. Launch the application.
 4. Go to the test dashboard at `<BASE_URI>/test-dashboard`. For example, `https://16a685b5.ngrok.io/test-dashboard`.
 
-## Usage
+## Using the test application
 
 ### Initial setup
 
-#### Grant administrator consent
+#### 1. Grant administrator consent
 The sample creates and manages teams, which needs permissions that require tenant administrator consent.
 1. Go to the test dashboard and click on "Grant admin consent".
 2. When prompted, log in as a tenant administrator and authorize the application.
 
-#### Establish user context
+#### 2. Establish user context
 If the app is running in user context, the test dashboard will have a "User context" section that indicates the user corresponding to the token that will be used by the app. To set or change the user, click on "Set user" or "Change user".
 
 This user must be an admin, as it will create multiple teams, and a normal user can only create 250 teams.
 
-#### Populate the trips database
+#### 3. Populate the trips database
 To populate the trips database with fake flights, click on "Create trips". This deletes all existing trips, then adds new trips. The simulated trips leave on the 15th day of each month, starting with the next month, and continue for the next 12 months. For example, if the current month is March 2018, trips will be created that depart on 15 Apr 2018, 15 May 2018, ..., 15 Mar 2019.
 
-### Running the sample
+### Simulate updates
 To simulate an update trigger, enter the date and time and click on "Simulate".
 
-If the trigger time is T, the update logic does the following:
-1. Look for trips departing within the range [T, (T + 7d)], and create teams for each trip. 
-    * The team name and description are be based on the trip information.
-    * The team roster comprises the cabin crew members working on that flight.
-2. Look for teams that correspond to trips depart in the range [(T - 7d), (T + 7d)], and update their roster so that they reflect any crew changes. That is, if crew members were added, they are added to the team, and if crew members were removed from the trip, they are removed from the team.
-3. Look for teams that correspond to trips that have departed before (T - 14d), and "archive" those teams. Microsoft Teams does not support true archive functionality yet, so to "archive" a team:
-    * Remove all members from the team.
-    * Rename the team to add an "[ARCHIVED]" tag.
-    * Change the owner to an be "archive owner" user.
-
-### Resetting the sample
+### Reset the app state
 The app tracks the teams that it has created, so the app will create a team for a trip only once. When you've reached the end of the 12 months, reset the state of the simulation:
 1. Archive all the created teams by simulating a trigger for a date far into the future, for example, 15 Dec 2030.
 2. Click on "Delete created teams" to delete all the teams and clear the database.
 
 This does not reset the trips database. The trips pre-populated previously will still be there. To create a new set of trips, click on "Create trips".
+
+## Graph references
+Microsoft Graph has APIs to [manage groups](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/resources/group) and to [manage teams](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/resources/team).
+* Groups
+    * [Create group](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_post_groups)
+    * [Get group](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_get)
+    * [Add owner](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_post_members)
+    * [Add member](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_post_members)
+    * [Get owners](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_list_owners)
+    * [Get members](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_list_members)
+    * [Remove owner](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_delete_owners)
+    * [Remove member](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_delete_members)
+    * [Update group](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/group_update)
+* Team
+    * [Create team](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/team_put_teams)
+    * [Get team](https://developer.microsoft.com/en-us/graph/docs/api-reference/beta/api/team_get)
