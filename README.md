@@ -34,6 +34,17 @@ If you are using Azure:
 6. Under "Application Secrets", click on "Generate New Password", and remember the generated password.
 7. Click "Save".
 
+### Office 365 tenant
+Go to `src\data\SampleData.ts` and edit the user names to correspond to users in your test tenant.
+_Tip:_ The names in the file correspond to auto-generated users in Microsoft demo tenants.
+
+Select 2 users and make them administrators:
+1. a user that will be used to create teams (see "Establish user context" section below)
+2. a user that will be the owner of archived teams (see `ARCHIVEDTEAM_OWNER_UPN` below)
+
+These can be the same user, if desired. Note that as teams are archived they will be "parked" on the archived teams owner,
+so that user will end owning many many teams.
+
 ### Application environment
 
 Set the following environment variables:
