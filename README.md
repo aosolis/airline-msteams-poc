@@ -21,7 +21,7 @@ Assume that the airline trip database has an [interface](https://github.com/aoso
 * `findTripsDepartingInRangeAsync(startTime: Date, endTime: Date): Promise<Trip[]>`
     * Find all trips departing between `startTime` and `endTime` (inclusive) 
 
-To keep track of the teams that the app has created, and the status of each team, the app maintains data for each team. [`TeamData`](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/storage/AppDataStore.ts#L30) has a `groupId`, `tripId`, `creationTime`,  `archivalTime` (not set if the team is active), and a snapshot of the trip details in `tripSnapshot`. The app keeps this in an (store)[https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/storage/AppDataStore.ts#L39] that supports the following operations:
+To keep track of the teams that the app has created, and the status of each team, the app maintains data for each team. [`TeamData`](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/storage/AppDataStore.ts#L30) has a `groupId`, `tripId`, `creationTime`,  `archivalTime` (not set if the team is active), and a snapshot of the trip details in `tripSnapshot`. The app keeps this in a [store](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/storage/AppDataStore.ts#L39) that supports the following operations:
 * `addOrUpdateTeamDataAsync(teamData: TeamData)`
     * Add or update info about a team that app created
 * `deleteTeamDataAsync(groupId: string)`
