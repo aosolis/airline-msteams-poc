@@ -73,18 +73,6 @@ Team membership operations require the user's AAD object ID, but the trip databa
 
 ## Setting up the application
 
-### Database
-This sample uses a Mongo database to:
-* store app-level settings
-* track the teams that it has created
-* simulate a database of airplane trips
-
-If you are using Azure:
-1. Create a [Cosmos DB](https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb-introduction) instance with API = "Mongo DB".
-2. Go to the "Collections > Browse" panel, select "Add Database" and enter a unique name.
-3. Go to "Settings > Connection String" panel, and get a read-write connection string, which will look like `mongodb://<instance>:<password>@<instance>.documents.azure.com:10255/?ssl=true&replicaSet=globaldb`.
-4. Insert the database name right before the query string `mongodb://<instance>:<password>@<instance>.documents.azure.com:10255/<databaseName>?ssl=true&replicaSet=globaldb`. This the connection string that you will use in the app configuration.
-
 ### Azure AD application
 1. Go to the [Application Registration Portal](https://apps.dev.microsoft.com) and sign in.
 2. Under "Converged applications", click on "Add an app".
@@ -105,16 +93,29 @@ If you are using Azure:
 6. Under "Application Secrets", click on "Generate New Password", and remember the generated password.
 7. Click "Save".
 
-### Office 365 tenant
-Go to `src\data\SampleData.ts` and edit the user names to correspond to users in your test tenant.
-_Tip:_ The names in the file correspond to auto-generated users in Microsoft demo tenants.
+### Database
+This sample uses a Mongo database to:
+* store app-level settings
+* track the teams that it has created
+* simulate a database of airplane trips
 
+If you are using Azure:
+1. Create a [Cosmos DB](https://docs.microsoft.com/en-us/azure/cosmos-db/mongodb-introduction) instance with API = "Mongo DB".
+2. Go to the "Collections > Browse" panel, select "Add Database" and enter a unique name.
+3. Go to "Settings > Connection String" panel, and get a read-write connection string, which will look like `mongodb://<instance>:<password>@<instance>.documents.azure.com:10255/?ssl=true&replicaSet=globaldb`.
+4. Insert the database name right before the query string `mongodb://<instance>:<password>@<instance>.documents.azure.com:10255/<databaseName>?ssl=true&replicaSet=globaldb`. This the connection string that you will use in the app configuration.
+
+### Office 365 tenant
 Select 2 users and make them administrators:
 1. a user that will be used to create teams (see "Establish user context" section below)
 2. a user that will be the owner of archived teams (see `ARCHIVEDTEAM_OWNER_UPN` below)
 
 These can be the same user, if desired. Note that as teams are archived they will be "parked" on the archived teams owner,
 so that user will end owning many many teams.
+
+### Sample data
+Go to `src\data\SampleData.ts` and edit the user names to correspond to users in your test tenant.
+_Tip:_ The names in the file correspond to auto-generated users in Microsoft demo tenants.
 
 ### Application environment
 
