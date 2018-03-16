@@ -46,7 +46,7 @@
             queryParams[k] = v;
         });
 
-        if (queryParams["admin_consent"] === "True") {
+        if (!queryParams["error"]) {
             window.location.assign("/test-dashboard");
         } else {
             $("#consentDenied").css({ display: "" });

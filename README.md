@@ -27,7 +27,7 @@ If you are using Azure:
         * User.Read.All
     * Application permissions:
         * Group.ReadWrite.All
-        * User.ReadWrite.All
+        * User.Read.All
 5. Under "Platforms", click on "Add platform", choose "Web", then add the following redirect URLs:
      * `https://<your_ngrok_url>/usercontext/callback`
      * `https://<your_ngrok_url>/adminconsent/callback`
