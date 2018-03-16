@@ -13,15 +13,15 @@ An airline has a set of cabin crew members that leave together on a trip, with t
 ### Solution
 
 #### Data model
-A `Trip` has a unique `tripId` and a `departureTime`. It is comprised of a list of `Flight` segments, each of which has a `flightNumber`, `origin` airport and `destination` airport. The trip also has a list of `CrewMember` entities, which are uniquely identified by their `userPrincipalName`.
+A [`Trip`](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/trips/TripsApi.ts#L28) has a unique `tripId` and a `departureTime`. It is comprised of a list of `Flight` segments, each of which has a `flightNumber`, `origin` airport and `destination` airport. The trip also has a list of `CrewMember` entities, which are uniquely identified by their `userPrincipalName`.
 
-Assume that the airline trip database has an interface that supports the following operations:
+Assume that the airline trip database has an [interface](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/trips/TripsApi.ts#L47) that supports the following operations:
 * `getTripAsync(tripId: string): Promise<Trip>`
     * Get the details of a trip, given its trip id
 * `findTripsDepartingInRangeAsync(startTime: Date, endTime: Date): Promise<Trip[]>`
     * Find all trips departing between `startTime` and `endTime` (inclusive) 
 
-To keep track of the teams that the app has created, and the status of each team, the app maintains data for each team. `TeamData` has a `groupId`, `tripId`, `creationTime`,  `archivalTime` (not set if the team is active), and a snapshot of the trip details in `tripSnapshot`. The app keeps this in an additional store that supports the following operations:
+To keep track of the teams that the app has created, and the status of each team, the app maintains data for each team. [`TeamData`](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/storage/AppDataStore.ts#L30) has a `groupId`, `tripId`, `creationTime`,  `archivalTime` (not set if the team is active), and a snapshot of the trip details in `tripSnapshot`. The app keeps this in an (store)[https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/storage/AppDataStore.ts#L39] that supports the following operations:
 * `addOrUpdateTeamDataAsync(teamData: TeamData)`
     * Add or update info about a team that app created
 * `deleteTeamDataAsync(groupId: string)`
@@ -37,15 +37,15 @@ To keep track of the teams that the app has created, and the status of each team
 
 #### Core logic
 At a periodic interval (e.g., 1 hour), depending on business needs, the app runs through the following steps to create and update teams:
-1. Archive old teams:
+1. [Archive old teams](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L296)
     1. Get all active teams.
     2. Determine the teams that correspond to trips that have departed more than 14 days ago.
-    3. "Archive" each team. Microsoft Teams doesn't yet support true archive functionality, so instead:
+    3. ["Archive" each team.](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L326) Microsoft Teams doesn't yet support true archive functionality, so instead:
         1. Remove all members from the team.
         2. Rename the team to add an "[ARCHIVED]" tag.
         3. Change the owner to an be "archive owner" user. This archive owner must be an administrator, as normal users are limited to being an owner/member of up to 250 groups only.
         4. Mark the team as "archived" in the app data store.
-2. Update active teams:
+2. [Update active teams](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L235)
     1. Get all active teams.
     2. Determine the teams that correspond to trips that haven't left yet, or have left up to 14 days ago.
     3. For each team, synchronize the team membership with the current crew roster:
@@ -54,14 +54,20 @@ At a periodic interval (e.g., 1 hour), depending on business needs, the app runs
         3. Remove all users that are team members, but no longer in the cabin crew roster.
         4. Add users that are in the cabin crew roster, but are not members of the team.
         5. Update the trip snapshot in the app data store.
-3. Create new teams:
+3. [Create new teams](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L122)
     1. Get all trips departing within the next 7 days.
     3. For each trip, create a team if we don't have one yet:
         1. Check if we have already created a team for this trip, if so, skip this team (we would have updated it in step #2).
         2. Get the current trip details.
-        3. Create a team for the trip. Set the team name and description based on the trip details.
+        3. [Create a team for the trip.](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L156) Set the team name and description based on the trip details.
         4. Add users that are in the cabin crew roster.
         5. Update the team information in the app data store.
+
+Most of these are straightforward member management operations. The only tricky operation is creating a team, where there are a few potential pitfalls:
+1. To create a team, you first create a group, then convert ("migrate") it to a team.
+2. It takes several seconds for the group information to propagate. During that time, attempting to convert the group to a team will fail. To handle this, the app [waits and retries the operation several times](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsApi.ts#L150).
+3. If the operation ultimately fails, remember to [delete the group](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsApi.ts#L187) so that it is not left in an orphaned state.
+4. There's a similar issue when adding members to a team right after it is created. The app works around this problem by [waiting for a few seconds before adding members to a team](https://github.com/aosolis/emirates-msteams-poc/blob/939c70b1f8c681d6b8a9c660af8c841b5618d653/src/TeamsUpdater.ts#L196). Without this delay, the members are added to the group successfully, but will not be visible in the team for several hours.
 
 ## Setting up the application
 
