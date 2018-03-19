@@ -1,0 +1,240 @@
+<!--
+// Copyright (c) Microsoft Corporation
+// All rights reserved.
+//
+// MIT License:
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED ""AS IS"", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+
+<html>
+<head>
+    <title>Flight Configuration</title>
+
+    <style>
+    @font-face {
+        font-family: MSTeamsIcons-Light;
+        font-style: normal;
+        font-weight: normal;
+        src: url('TeamsAssets-Light.eot');
+        src: url('TeamsAssets-Light.eot?#iefix') format('embedded-opentype'),
+            url('TeamsAssets-Light.ttf') format('truetype'),
+            url('TeamsAssets-Light.woff2') format('woff2'),
+            url('TeamsAssets-Light.woff') format('woff'),
+            url('TeamsAssets-Light.svg#MSTeamsIcons-Light') format('svg')
+    }
+
+    .icon-base {
+        -moz-osx-font-smoothing: grayscale;
+        -webkit-font-smoothing: antialiased;
+        display: block;
+        font-family: MSTeamsIcons-Light !important;
+        font-size: 16px;
+        font-style: normal;
+        font-variant: normal;
+        font-weight: normal;
+        line-height: 1;
+        speak: none;
+        text-rendering: optimizeLegibility;
+    }
+
+    .icon-more-filled::before {
+        bottom: 1px;
+        content: "\e94f";
+        position: relative;
+    }
+
+    .icon-monkey::before {
+        bottom: 1px;
+        content: "\e633";
+        position: relative;
+    }
+
+    .list {
+        margin-bottom:4px; 
+        width: 250px;  
+        border: none; 
+        background: #F0F2F4; 
+        padding:10px; 
+        overflow-y: hidden;
+    }
+
+    .list select:focus {
+        border: none
+    }
+    </style>
+    <link rel="stylesheet" type="text/css" href="/styles/msteams-16.css" media="screen" >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" >
+</head>
+<body class="theme-light">
+    <div class="surface" style="height: 100vh">
+        <div class="panel" style="max-height: 100%">
+            <div class="panel-header">
+                <div class="font-semibold font-title">
+                    Flight Configuration
+                </div>
+            </div>
+            <div class="panel-body" style="margin-top:10px">
+                <table>
+                    <tr>
+                        <td>
+                            <div class="font-title2" style="margin-bottom:4px">Trips</div>
+                            <div class="select-style">
+                            <select id="tripsList" name="Trips" size="16" class="list font-base" onchange="onTripSelected()"></select>
+                            <div>
+                                <a class="font-base">Add trip</a>
+                            </div>
+                            </div>	
+                        </td>
+                        <td >
+                            <div style="margin-left:20px">
+                                <div class="font-title2" style="margin-bottom:4px">Flight Crew</div>
+                                <select id="rosterList" name="Roster" size="16" class="list font-base"></select>
+                                <div>
+                                    <a class="font-base">Add crew</a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+                <div style="column-count: 2;column-gap: 1px;column-width:100px">
+                </div>
+                <div class="font-title2" style="margin-top: 10px" >Time Machine</div>
+                <div class="input-container" style="width: 250px">
+                    <label aria-live="assertive" for="input1">
+                        <span class="label">Date</span>
+                    </label>
+                    <input class="input-field" placeholder="Placeholder text" id="triggerDate" type="date"></input>
+                </div>
+                <div class="input-container" style="width: 250px">
+                    <label aria-live="assertive" for="input1">
+                        <span class="label">Time</span>
+                    </label>
+                    <input class="input-field" placeholder="Placeholder text"  id="triggerTime" type="time" value="00:00"></input>
+                </div>
+                <div><button onclick="trigger()" class="button-primary" style="margin-top: 10px" >Go</button></div>
+                <p id="divTriggerStatus"></p>
+            </div>
+		<div class="panel-footer"></div>
+	</div>
+
+    <script src="https://code.jquery.com/jquery-3.1.1.js" integrity="sha384-VC7EHu0lDzZyFfmjTPJq+DFyIn8TUGAJbEtpXquazFVr00Q/OOx//RjiZ9yU9+9m" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.5/lodash.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.21.0/moment.min.js" crossorigin="anonymous"></script>
+    <script type="text/javascript">
+        // Get trips when page is loaded
+        let trips;
+        $(document).ready(function () {
+            $.ajax({
+                method: "POST",
+                url: window.location.origin + "/demo-dashboard/execute?command=getTrips",
+                beforeSend: function(request) {
+                    request.setRequestHeader("X-Api-Key", "{{updateApiKey}}");
+                },
+                success: function (data) {
+                    trips = data;
+                    populateTripsList(trips);
+                },
+                error: function (xhr, textStatus, errorThrown) {
+                    console.log("textStatus: " + textStatus + ", errorThrown:" + errorThrown);
+                    $("#divTestStatus").text("Error!");
+                },
+            });
+        });
+
+        // Trigger an update for a given date and time
+        function trigger() {
+            // Construct the trigger date and time
+            let date = $("#triggerDate")[0].valueAsDate;
+            let time = $("#triggerTime")[0].valueAsDate;
+            date.setUTCHours(time.getUTCHours());
+            date.setUTCMinutes(time.getUTCMinutes());
+
+            // Trigger the update
+            let status = "Simulating update for date " + date.toISOString() + "...";
+            $("#divTriggerStatus").text(status);
+            $.ajax({
+                method: "POST",
+                url: window.location.origin + "/api/updateTeams?date=" + date.toISOString(),
+                beforeSend: function(request) {
+                    request.setRequestHeader("X-Api-Key", "{{updateApiKey}}");
+                },
+                success: function (data) {
+                    $("#divTriggerStatus").text(status + " Done!");
+                },
+                error: function (xhr, textStatus, errorThrown) {
+                    console.log("textStatus: " + textStatus + ", errorThrown:" + errorThrown);
+                    $("#divTriggerStatus").text(status + " Error!");
+                },
+            });
+        }
+
+        // Execute a test command
+        function executeTestCommand(command, description) {
+            // Trigger the update
+            let status = "Running command to " + description + "...";
+            $("#divTestStatus").text(status);
+            $.ajax({
+                method: "POST",
+                url: window.location.origin + "/admin-dashboard/execute?command=" + command,
+                success: function (data) {
+                    $("#divTestStatus").text(status + " Done!");
+                },
+                error: function (xhr, textStatus, errorThrown) {
+                    console.log("textStatus: " + textStatus + ", errorThrown:" + errorThrown);
+                    $("#divTestStatus").text(status + " Error!");
+                },
+            });
+        }
+
+        // Populate list of trips
+        function populateTripsList(trips) {
+            trips.sort((left, right) => left.departureTime.localeCompare(right.departureTime));
+
+            let tripsListElement = $("#tripsList");
+            trips.forEach((trip) => {
+                let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
+                let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
+                let departureDate = moment(trip.departureTime).utcOffset(240).format("MM/DD/YYYY");
+                tripsListElement.append("<option value=\"" + trip.tripId + "\">" + flightNumbers + " " + /*route + " " +*/ departureDate +  "</option>");
+            });
+
+            tripsListElement[0].selectedIndex = 0;
+            onTripSelected();
+        }
+
+        // Populate roster of selected trip
+        function onTripSelected() {
+            let tripsListElement = $("#tripsList")[0];
+            let selectedTrip = trips[tripsListElement.selectedIndex];
+
+            // Clear roster list
+            let rosterListElement = $("#rosterList");
+            while (rosterListElement[0].firstChild) {
+                rosterListElement[0].removeChild(rosterListElement[0].firstChild);
+            }
+
+            // Add roster elements
+            selectedTrip.crewMembers.forEach((crewMember) => {
+                rosterListElement.append("<option value=\"" + crewMember.userPrincipalName + "\">" + crewMember.displayName + "</option>")
+            });
+        }
+    </script>
+</body>
+</html>

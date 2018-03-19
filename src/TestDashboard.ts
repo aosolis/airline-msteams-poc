@@ -43,7 +43,7 @@ export class TestDashboard
     }
 
     // Render the test dashboard
-    public async renderDashboard(res: Response): Promise<void> {
+    public async renderDashboard(res: Response, viewName: string): Promise<void> {
         let isUserContext = (config.get("app.apiContext") === "user");
         let locals = {
             appId: config.get("app.appId"),
@@ -63,7 +63,7 @@ export class TestDashboard
             }
         }
 
-        res.render("test-dashboard", locals);
+        res.render(viewName, locals);
     }
 
     // Handle test commands
@@ -72,10 +72,13 @@ export class TestDashboard
 
         switch (req.query["command"]) {
             case "deleteTeams":
+                // Delete tracked teams
                 await this.teamsUpdater.deleteAllTrackedTeamsAsync();
+                res.sendStatus(200);
                 break;
 
             case "createTrips":
+                // Create test trips
                 await tripsTest.deleteAllTripsAsync();
 
                 // first occurrence is the 15th of the next month
@@ -84,10 +87,22 @@ export class TestDashboard
                     await this.createTrips(tripsTest, date.toDate());
                     date = date.add(1, "month");
                 }
+                res.sendStatus(200);
+                break;
+
+            case "getTrips":
+                // Get all trips
+                let now = Date.now();
+                let oneYear = 365 * 24 * 60 * 60 * 1000;
+                let trips = await this.tripsApi.findTripsDepartingInRangeAsync(new Date(now - oneYear), new Date(now + (2 * oneYear)));
+                res.status(200).send(trips);
+                break;
+
+            default:
+                // Unknown command
+                res.sendStatus(400);
                 break;
         }
-
-        res.sendStatus(200);
     }
 
     // Create trips in the database that leave on the given date

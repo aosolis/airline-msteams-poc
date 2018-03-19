@@ -118,9 +118,17 @@ app.get("/usercontext/callback", async (req, res) => {
 // Test dashboard
 let testDashboard = new TestDashboard(tripsApi, appDataStore, teamsUpdater);
 app.get("/test-dashboard", async (req, res) => {
-    await testDashboard.renderDashboard(res);
+    await testDashboard.renderDashboard(res, "test-dashboard");
 });
 app.post("/test-dashboard/execute", async (req, res) => {
+    await testDashboard.handleCommand(req, res);
+});
+
+// Demo dashboard
+app.get("/demo-dashboard", async (req, res) => {
+    await testDashboard.renderDashboard(res, "demo-dashboard");
+});
+app.post("/demo-dashboard/execute", async (req, res) => {
     await testDashboard.handleCommand(req, res);
 });
 
