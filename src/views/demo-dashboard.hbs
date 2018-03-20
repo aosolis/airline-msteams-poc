@@ -98,7 +98,7 @@
                             <div class="select-style">
                             <select id="tripsList" name="Trips" size="16" class="list font-base" onchange="onTripSelected()"></select>
                             <div>
-                                <a class="font-base">Add trip</a>
+                                <a class="font-base anchor">Add trip</a>
                             </div>
                             </div>	
                         </td>
@@ -107,7 +107,7 @@
                                 <div class="font-title2" style="margin-bottom:4px">Flight Crew</div>
                                 <select id="rosterList" name="Roster" size="16" class="list font-base"></select>
                                 <div>
-                                    <a class="font-base">Add crew</a>
+                                    <a class="font-base anchor">Add crew</a>
                                 </div>
                             </div>
                         </td>
@@ -115,20 +115,20 @@
                 </table>
                 <div style="column-count: 2;column-gap: 1px;column-width:100px">
                 </div>
-                <div class="font-title2" style="margin-top: 10px" >Time Machine</div>
-                <div class="input-container" style="width: 250px">
+                <div class="font-title2" style="margin-top: 24px; margin-bottom: 6px" >Time Machine</div>
+                <div class="input-container" style="width: 250px; margin-bottom: 6px">
                     <label aria-live="assertive" for="input1">
                         <span class="label">Date</span>
                     </label>
                     <input class="input-field" placeholder="Placeholder text" id="triggerDate" type="date"></input>
                 </div>
-                <div class="input-container" style="width: 250px">
+                <div class="input-container" style="width: 250px; margin-bottom: 6px">
                     <label aria-live="assertive" for="input1">
                         <span class="label">Time</span>
                     </label>
                     <input class="input-field" placeholder="Placeholder text"  id="triggerTime" type="time" value="00:00"></input>
                 </div>
-                <div><button onclick="trigger()" class="button-primary" style="margin-top: 10px" >Go</button></div>
+                <div><button onclick="trigger()" class="button-primary" style="margin-top: 6px" >Go</button></div>
                 <p id="divTriggerStatus"></p>
             </div>
 		<div class="panel-footer"></div>
