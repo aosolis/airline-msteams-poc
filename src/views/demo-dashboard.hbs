@@ -68,7 +68,7 @@
 
     .list {
         margin-bottom:4px; 
-        width: 250px;  
+        width: 300px;  
         border: none; 
         background: #F0F2F4; 
         padding:10px; 
@@ -210,9 +210,9 @@
             let tripsListElement = $("#tripsList");
             trips.forEach((trip) => {
                 let flightNumbers = "EK" + _(trip.flights).map(flight => flight.flightNumber).uniq().join("/");
-                let route = _(trip.flights).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
+                let route = _(trip.flights).take(trip.flights.length / 2).map(flight => flight.destination).unshift(trip.flights[0].origin).join("-");
                 let departureDate = moment(trip.departureTime).utcOffset(240).format("MM/DD/YYYY");
-                tripsListElement.append("<option value=\"" + trip.tripId + "\">" + flightNumbers + " " + /*route + " " +*/ departureDate +  "</option>");
+                tripsListElement.append("<option value=\"" + trip.tripId + "\">" + flightNumbers + " " + route + " " + departureDate +  "</option>");
             });
 
             tripsListElement[0].selectedIndex = 0;
