@@ -30,7 +30,7 @@ import { IAppDataStore } from "./storage/AppDataStore";
 // Teams Graph API
 // =========================================================
 
-const graphBaseUrl = "https://graph.microsoft.com/testTeamsTestEnv";
+const graphBaseUrl = "https://graph.microsoft.com/beta";
 const graphUserType = "#microsoft.graph.user";
 const expirationTimeBufferInSeconds = 60;
 
